@@ -78,7 +78,7 @@ export default function Room() {
   };
 
   const shareRoom = async () => {
-    const shareUrl = `${window.location.origin}${window.location.pathname}#/room/${roomId}?name=`;
+    const shareUrl = `${window.location.origin}${window.location.pathname}#/?join=${roomId}`;
     const shareData = {
       title: 'Vem jogar comigo! 💕',
       text: `Entra na sala e coloca seu nome!\n\nCódigo: ${roomId}\n\nOu clique no link:`,

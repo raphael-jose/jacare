@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Sparkles, Users, Plus } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
@@ -17,11 +17,12 @@ const itemVariants = {
 
 export default function Home() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { emit, on } = useSocket();
   
   const [playerName, setPlayerName] = useState('');
   const [avatar, setAvatar] = useState('🐱');
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(searchParams.get('join')?.toUpperCase() || '');
   const [isJoining, setIsJoining] = useState(false);
 
   useEffect(() => {
