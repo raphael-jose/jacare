@@ -13,7 +13,6 @@ const GAMES = [
   { id: 'memory', name: 'Jogo da Memoria', emoji: '🧠', description: 'Teste sua memoria com cartas fofas!', color: 'from-amber-400 to-orange-500', bg: 'bg-amber-50', border: 'border-amber-200' },
   { id: 'words', name: 'Jogo de Palavras', emoji: '✍️', description: 'Quem escreve mais rapido?', color: 'from-cyan-400 to-blue-500', bg: 'bg-cyan-50', border: 'border-cyan-200' },
   { id: 'snake', name: 'Corrida de Cobras', emoji: '🐍', description: 'Compete por comida! Quem crescer mais vence!', color: 'from-green-400 to-emerald-500', bg: 'bg-green-50', border: 'border-green-200' },
-  { id: 'runner', name: 'Runner Competitivo', emoji: '🏃', description: 'Corra e desvie de obstaculos lado a lado!', color: 'from-orange-400 to-red-500', bg: 'bg-orange-50', border: 'border-orange-200' },
   { id: 'dodgeball', name: 'Dodgeball', emoji: '🤾', description: 'Jogue bolas uma na outra! Quem acertar mais vence!', color: 'from-violet-400 to-purple-500', bg: 'bg-violet-50', border: 'border-violet-200' },
 ];
 

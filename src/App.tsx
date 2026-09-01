@@ -7,7 +7,6 @@ import Hangman from './pages/Hangman';
 import MemoryGame from './pages/MemoryGame';
 import WordGame from './pages/WordGame';
 import SnakeRace from './pages/SnakeRace';
-import Runner from './pages/Runner';
 import Dodgeball from './pages/Dodgeball';
 import FloatingHearts from './components/FloatingHearts';
 import BackgroundMusic from './components/BackgroundMusic';
@@ -27,7 +26,6 @@ function App() {
             <Route path="/game/memory/:roomId" element={<MemoryGame />} />
             <Route path="/game/words/:roomId" element={<WordGame />} />
             <Route path="/game/snake/:roomId" element={<SnakeRace />} />
-            <Route path="/game/runner/:roomId" element={<Runner />} />
             <Route path="/game/dodgeball/:roomId" element={<Dodgeball />} />
           </Routes>
         </div>
