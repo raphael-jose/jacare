@@ -525,6 +525,9 @@ io.on('connection', (socket: Socket) => {
       socket.to(roomId).emit(event);
     });
   }
+  socket.on('music:volume', ({ roomId, volume }: { roomId: string; volume: number }) => {
+    socket.to(roomId).emit('music:volume', { volume });
+  });
 
   // ===== NEW GAMES =====
 
