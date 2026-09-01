@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Copy, Check, Heart, Users } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
+import { showError } from '../utils/alert';
 
 const gameNames: Record<string, string> = {
   tictactoe: 'Jogo da Velha 💕',
