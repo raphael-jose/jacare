@@ -170,27 +170,33 @@ io.on('connection', (socket: Socket) => {
     const room = rooms.get(roomId);
 
     if (!room) {
-      socket.emit('room:error', { message: 'Sala nao encontrada! 😢' });
+      socket.emit('room:error', { message: 'Sala nao encontrada!' });
+      return;
+    }
+
+    socket.join(roomId);
+    socket.data = { roomId, playerName };
+
+    const existingIdx = room.players.findIndex(p => p.id === socket.id);
+    if (existingIdx >= 0) {
+      room.players[existingIdx].name = playerName;
+      room.players[existingIdx].avatar = avatar || room.players[existingIdx].avatar;
+      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+      socket.emit('room:joined', { roomId, players: playersData });
       return;
     }
 
     if (room.players.length >= room.maxPlayers) {
-      socket.emit('room:error', { message: 'Sala cheia! 💔' });
+      socket.emit('room:error', { message: 'Sala cheia!' });
       return;
     }
 
-    room.players.push({ id: socket.id, name: playerName, avatar: avatar || '🐱' });
-    socket.join(roomId);
-    socket.data = { roomId, playerName };
+    room.players.push({ id: socket.id, name: playerName, avatar: avatar || 'cat' });
 
     const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
     socket.emit('room:joined', { roomId, players: playersData });
-    
-    // Notify the creator that someone joined
-    socket.to(roomId).emit('room:playerJoined', { 
-      players: playersData,
-      playerName 
-    });
+    socket.to(roomId).emit("room:playerJoined", { players: playersData, playerName });
+    console.log(playerName + " entrou na sala " + roomId);
 
     console.log(`💕 ${playerName} entrou na sala ${roomId}`);
   });

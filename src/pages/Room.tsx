@@ -30,7 +30,9 @@ export default function Room() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
   useEffect(() => {
-    // Request current room state (works for both creator and joiner)
+    // Join the room (server handles if already in room)
+    emit('room:join', { roomId, playerName, avatar });
+    // Also get current state
     emit('room:getState', { roomId, playerName, avatar });
 
     const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
