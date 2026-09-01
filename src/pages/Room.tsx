@@ -65,7 +65,7 @@ export default function Room() {
     });
 
     const unsub4 = on('room:gameSelected', (data: { gameType: string }) => {
-      navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}`);
+      navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
     });
 
     return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); };

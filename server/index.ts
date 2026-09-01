@@ -388,7 +388,7 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('hangman:guess', ({ roomId, letter }: { roomId: string; letter: string }) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || !room.state.word) return;
     const isCorrect = room.state.word.includes(letter);
     if (!room.state.guessedLetters) room.state.guessedLetters = [];
     room.state.guessedLetters.push(letter);
@@ -669,14 +669,6 @@ io.on('connection', (socket: Socket) => {
 
   // ===== CHAOTIC KITCHEN =====
 
-  const KITCHEN_RECIPES = [
-    { name: 'Pizza', emoji: '🍕', steps: ['massa', 'molho', 'queijo', 'assar'] },
-    { name: 'Sushi', emoji: '🍣', steps: ['arroz', 'peixe', 'enrolar'] },
-    { name: 'Hamburguer', emoji: '🍔', steps: ['pao', 'carne', 'alface', 'pao'] },
-    { name: 'Bolo', emoji: '🎂', steps: ['massa', 'creme', 'fruta'] },
-    { name: 'Salada', emoji: '🥗', steps: ['alface', 'tomate', 'molho'] },
-  ];
-
   socket.on('kitchen:join', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (!room) return;
@@ -789,6 +781,7 @@ function initMemoryGame(room: Room) {
 function startWordRound(room: Room) {
   if (room.players.length < 2) return;
   room.state.round = (room.state.round || 0) + 1;
+  if (!room.state.wordScores) room.state.wordScores = { player1: 0, player2: 0 };
   room.state.submittedWords = {};
   const category = WORD_CATEGORIES[Math.floor(Math.random() * WORD_CATEGORIES.length)];
   const word = category.words[Math.floor(Math.random() * category.words.length)];
@@ -809,7 +802,6 @@ function evaluateWordRound(room: Room) {
   results.forEach((result, index) => {
     if (result.correct) {
       room.state.wordScores[`player${index + 1}`] += 10;
-      room.state.wordScores[`player${index + 1}`] += 5;
     }
   });
   io.to(room.id).emit('words:roundResult', {
@@ -855,17 +847,17 @@ function runnerTick(room: Room) {
   for (let i = 0; i < r.players.length; i++) {
     const p = r.players[i];
     if (!p.alive) continue;
-    // Gravity - landing
-    if (p.jumping) {
-      p.jumping = false;
-    }
     for (const o of r.obstacles) {
       if (Math.abs(o.x - 1) < 0.8 && o.y === p.y) {
-        if (o.type === 'low' && !p.slide) { p.alive = false; }
+        if (o.type === 'low' && p.slide) { /* dodged */ }
+        else if (o.type === 'low' && !p.slide) { p.alive = false; }
         if (o.type === 'high' && p.jumping) { /* dodged */ }
         else if (o.type === 'high' && !p.jumping) { p.alive = false; }
       }
     }
+    // Reset jump/slide after collision check
+    p.jumping = false;
+    p.slide = false;
     if (p.alive) p.score++;
   }
   // Check game over
