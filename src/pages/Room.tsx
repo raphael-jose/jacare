@@ -74,7 +74,7 @@ export default function Room() {
   };
 
   const shareRoom = async () => {
-    const shareUrl = `${window.location.origin}/room/${roomId}?name=`;
+    const shareUrl = `${window.location.origin}${window.location.pathname}#/room/${roomId}?name=`;
     const shareData = {
       title: 'Vem jogar comigo! 💕',
       text: `Entra na sala e coloca seu nome!\n\nCódigo: ${roomId}\n\nOu clique no link:`,
@@ -99,16 +99,17 @@ export default function Room() {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-lg"
       >
-        {/* Back button */}
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={() => navigate('/')}
-          className="mb-6 flex items-center gap-2 text-love-600 font-bold"
-        >
-          <ArrowLeft size={20} />
-          Voltar
-        </motion.button>
+        {/* Back + Leave buttons */}
+        <div className="flex items-center justify-between mb-6">
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-red-400 font-bold text-sm"
+          >
+            🚪 Sair da Sala
+          </motion.button>
+        </div>
 
         {/* Room header */}
         <motion.div

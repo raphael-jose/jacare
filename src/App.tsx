@@ -7,12 +7,14 @@ import Hangman from './pages/Hangman';
 import MemoryGame from './pages/MemoryGame';
 import WordGame from './pages/WordGame';
 import FloatingHearts from './components/FloatingHearts';
+import BackgroundMusic from './components/BackgroundMusic';
 
 function App() {
   return (
     <SocketProvider>
       <div className="min-h-screen relative">
         <FloatingHearts />
+        <BackgroundMusic />
         <div className="relative z-10">
           <Routes>
             <Route path="/" element={<Home />} />

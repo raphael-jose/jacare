@@ -96,6 +96,7 @@ export default function TicTacToe() {
   const resetGame = () => emit('game:reset', { roomId });
 
   const backToRoom = () => navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
+  const leaveRoom = () => navigate('/');
 
   const getCellEmoji = (value: string | null) => {
     if (value === 'X') return '💕';
@@ -109,7 +110,7 @@ export default function TicTacToe() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={backToRoom} className="flex items-center gap-2 text-love-600 font-bold">
-            <ArrowLeft size={20} /> Voltar
+            <ArrowLeft size={20} /> Trocar Jogo
           </motion.button>
           <h1 className="text-xl font-black text-love-700">Jogo da Velha 💕</h1>
           <div className="flex gap-2">
@@ -118,8 +119,8 @@ export default function TicTacToe() {
                 <RotateCcw size={20} />
               </motion.button>
             )}
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={backToRoom} className="p-2 rounded-full bg-love-100 text-love-600">
-              <ArrowRight size={20} />
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={leaveRoom} className="text-red-400 font-bold text-xs">
+              🚪 Sair
             </motion.button>
           </div>
         </div>

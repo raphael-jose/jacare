@@ -141,23 +141,28 @@ export default function MemoryGame() {
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}`)}
+            onClick={() => navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`)}
             className="flex items-center gap-2 text-love-600 font-bold"
           >
             <ArrowLeft size={20} />
-            Voltar
+            Trocar Jogo
           </motion.button>
           <h1 className="text-xl font-black text-love-700">Memória 🧠</h1>
-          {gameOver && (
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={resetGame}
-              className="p-2 rounded-full bg-love-100 text-love-600"
-            >
-              <RotateCcw size={20} />
+          <div className="flex gap-2">
+            {gameOver && (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={resetGame}
+                className="p-2 rounded-full bg-love-100 text-love-600"
+              >
+                <RotateCcw size={20} />
+              </motion.button>
+            )}
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => navigate('/')} className="text-red-400 font-bold text-xs">
+              🚪 Sair
             </motion.button>
-          )}
+          </div>
         </div>
 
         {/* Players & Stats */}

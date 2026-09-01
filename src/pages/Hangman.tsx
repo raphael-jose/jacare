@@ -220,19 +220,24 @@ export default function Hangman() {
             className="flex items-center gap-2 text-love-600 font-bold"
           >
             <ArrowLeft size={20} />
-            Voltar
+            Trocar Jogo
           </motion.button>
           <h1 className="text-xl font-black text-love-700">Jogo da Forca 💝</h1>
-          {gameState !== 'setup' && (
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={resetGame}
-              className="p-2 rounded-full bg-love-100 text-love-600"
-            >
-              <RotateCcw size={20} />
+          <div className="flex gap-2">
+            {gameState !== 'setup' && (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={resetGame}
+                className="p-2 rounded-full bg-love-100 text-love-600"
+              >
+                <RotateCcw size={20} />
+              </motion.button>
+            )}
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => navigate('/')} className="text-red-400 font-bold text-xs">
+              🚪 Sair
             </motion.button>
-          )}
+          </div>
         </div>
 
         {/* Players info */}
