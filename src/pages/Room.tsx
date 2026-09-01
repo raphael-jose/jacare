@@ -30,9 +30,7 @@ export default function Room() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
   useEffect(() => {
-    // Join the room (server handles if already in room)
-    emit('room:join', { roomId, playerName, avatar });
-    // Also get current state
+    // Get current room state (server handles adding the player if needed)
     emit('room:getState', { roomId, playerName, avatar });
 
     const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
@@ -48,6 +46,11 @@ export default function Room() {
       setPlayers(data.players);
       if (data.players.length >= 2) setWaiting(false);
     });
+
+    // Also request state again after a short delay (handles race conditions)
+    const retryTimer = setTimeout(() => {
+      emit('room:getState', { roomId, playerName, avatar });
+    }, 500);
 
     const unsub2 = on('room:playerJoined', (data: { players: { name: string; avatar: string }[]; playerName: string }) => {
       setPlayers(data.players);
@@ -67,7 +70,7 @@ export default function Room() {
       emit('room:getState', { roomId, playerName, avatar });
     });
 
-    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
+    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); clearTimeout(retryTimer); };
   }, [roomId, playerName, emit, on, navigate]);
 
   const copyCode = async () => {

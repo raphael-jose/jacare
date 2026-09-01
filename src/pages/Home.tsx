@@ -45,7 +45,7 @@ export default function Home() {
   const createRoom = () => {
     if (!playerName.trim()) return;
     setIsJoining(true);
-    emit('room:create', { playerName: playerName.trim() });
+    emit('room:create', { playerName: playerName.trim(), avatar });
   };
 
   const joinRoom = () => {
