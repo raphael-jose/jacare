@@ -196,17 +196,25 @@ io.on('connection', (socket: Socket) => {
   });
 
   // Room state request (for page refresh / navigation)
-  socket.on('room:getState', ({ roomId }: { roomId: string }) => {
+  socket.on('room:getState', ({ roomId, playerName, avatar }: { roomId: string; playerName?: string; avatar?: string }) => {
     const room = rooms.get(roomId);
     if (!room) {
-      socket.emit('room:error', { message: 'Sala nao encontrada! 😢' });
+      socket.emit('room:error', { message: 'Sala nao encontrada!' });
       return;
     }
-    // Re-join the socket to the room if not already in it
     socket.join(roomId);
-    socket.data = { roomId, playerName: room.players.find(p => p.id === socket.id)?.name || '' };
-    const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-    socket.emit('room:state', { players: playersData, gameType: room.gameType });
+    const existingIdx = room.players.findIndex(p => p.id === socket.id);
+    if (existingIdx === -1 && playerName && room.players.length < room.maxPlayers) {
+      room.players.push({ id: socket.id, name: playerName, avatar: avatar || '🐱' });
+      socket.data = { roomId, playerName };
+      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+      socket.emit('room:joined', { roomId, players: playersData });
+      socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName });
+    } else {
+      socket.data = { roomId, playerName: room.players.find(p => p.id === socket.id)?.name || playerName || '' };
+      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+      socket.emit('room:state', { players: playersData, gameType: room.gameType });
+    }
   });
 
   // ===== GAME SELECTION =====

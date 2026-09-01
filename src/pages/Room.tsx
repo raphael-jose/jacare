@@ -12,7 +12,6 @@ const GAMES = [
   { id: 'hangman', name: 'Jogo da Forca', emoji: '🎯', description: 'Adivinhe a palavra do amor!', color: 'from-fuchsia-400 to-purple-500', bg: 'bg-fuchsia-50', border: 'border-fuchsia-200' },
   { id: 'memory', name: 'Jogo da Memoria', emoji: '🧠', description: 'Teste sua memoria com cartas fofas!', color: 'from-amber-400 to-orange-500', bg: 'bg-amber-50', border: 'border-amber-200' },
   { id: 'words', name: 'Jogo de Palavras', emoji: '✍️', description: 'Quem escreve mais rapido?', color: 'from-cyan-400 to-blue-500', bg: 'bg-cyan-50', border: 'border-cyan-200' },
-  { id: 'snake', name: 'Corrida de Cobras', emoji: '🐍', description: 'Compete por comida! Quem crescer mais vence!', color: 'from-green-400 to-emerald-500', bg: 'bg-green-50', border: 'border-green-200' },
   { id: 'dodgeball', name: 'Dodgeball', emoji: '🤾', description: 'Jogue bolas uma na outra! Quem acertar mais vence!', color: 'from-violet-400 to-purple-500', bg: 'bg-violet-50', border: 'border-violet-200' },
 ];
 
@@ -31,13 +30,8 @@ export default function Room() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
   useEffect(() => {
-    // Creator already joined via room:create, only joiners need to emit room:join
     // Request current room state (works for both creator and joiner)
-    emit('room:getState', { roomId });
-
-    if (!isCreator) {
-      emit('room:join', { roomId, playerName, avatar });
-    }
+    emit('room:getState', { roomId, playerName, avatar });
 
     const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
       setPlayers(data.players);
