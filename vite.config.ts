@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 
 export default defineConfig({
-  base: './',
+  base: '/jacare/',
   plugins: [
     react(),
     VitePWA({
@@ -18,7 +18,7 @@ export default defineConfig({
         background_color: '#fff1f2',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        start_url: '/jacare/',
         icons: [
           {
             src: 'pwa-192x192.svg',
