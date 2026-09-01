@@ -231,6 +231,11 @@ io.on('connection', (socket: Socket) => {
     console.log(`🎮 Jogo ${gameType} selecionado na sala ${roomId}`);
   });
 
+  // Player goes back to room (switch game)
+  socket.on('room:backToRoom', ({ roomId }: { roomId: string }) => {
+    socket.to(roomId).emit('room:backToRoom');
+  });
+
   // ===== CHAT =====
 
   socket.on('chat:message', ({ roomId, text }: { roomId: string; text: string }) => {

@@ -96,7 +96,7 @@ export default function TicTacToe() {
 
   const resetGame = () => emit('game:reset', { roomId });
 
-  const backToRoom = () => navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
+  const backToRoom = () => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`); };
   const leaveRoom = () => navigate('/');
 
   const getCellEmoji = (value: string | null) => {

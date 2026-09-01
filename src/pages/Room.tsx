@@ -60,7 +60,12 @@ export default function Room() {
       navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
     });
 
-    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); };
+    const unsub5 = on('room:backToRoom', () => {
+      // Other player came back to room, refresh state
+      emit('room:getState', { roomId, playerName, avatar });
+    });
+
+    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
   }, [roomId, playerName, emit, on, navigate]);
 
   const copyCode = async () => {

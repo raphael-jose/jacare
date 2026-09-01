@@ -142,7 +142,7 @@ export default function WordGame() {
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`)}
+            onClick={() => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`); }}
             className="flex items-center gap-2 text-love-600 font-bold"
           >
             <ArrowLeft size={20} />

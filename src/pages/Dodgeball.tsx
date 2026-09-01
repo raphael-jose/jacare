@@ -6,6 +6,7 @@ import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
+import { showError } from '../utils/alert';
 
 interface DPlayer { x: number; y: number; hp: number; alive: boolean; dir: string; }
 interface Ball { x: number; y: number; vx: number; vy: number; owner: number; life: number; }
@@ -24,16 +25,23 @@ export default function Dodgeball() {
   const [balls, setBalls] = useState<Ball[]>([]);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
   const keysPressed = useRef<Set<string>>(new Set());
+  const lastMove = useRef(0);
 
   useEffect(() => {
     emit('dodgeball:join', { roomId });
 
-    const unsub1 = on('dodgeball:start', (data: { players: DPlayer[]; balls: Ball[]; arena: any }) => {
-      setPlayers(data.players);
-      setBalls(data.balls);
+    const unsub0 = on('game:playerLeft', (data: { playerName: string }) => {
+      showError(`${data.playerName} saiu do jogo`);
+    });
+
+    const unsub1 = on('dodgeball:start', (data: any) => {
+      setPlayers(data.players || []);
+      setBalls(data.balls || []);
       setGameOver(false);
       setWinner(null);
+      setConnected(true);
     });
 
     const unsub2 = on('dodgeball:tick', (data: { players: DPlayer[]; balls: Ball[] }) => {
@@ -48,8 +56,21 @@ export default function Dodgeball() {
       if (data.winner === playerName) playWin(); else playWrong();
     });
 
-    return () => { unsub1(); unsub2(); unsub3(); };
+    return () => { unsub0(); unsub1(); unsub2(); unsub3(); };
   }, [roomId, emit, on, playerName]);
+
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (gameOver) return;
+      keysPressed.current.add(e.key);
+      if (e.key === ' ') { e.preventDefault(); emit('dodgeball:throw', { roomId }); playClick(); }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => { keysPressed.current.delete(e.key); };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+  }, [roomId, emit, gameOver, playClick]);
 
   // Movement loop
   useEffect(() => {
@@ -65,44 +86,53 @@ export default function Dodgeball() {
     return () => clearInterval(interval);
   }, [roomId, emit, gameOver]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (gameOver) return;
-      keysPressed.current.add(e.key);
-      if (e.key === ' ') { e.preventDefault(); emit('dodgeball:throw', { roomId }); playClick(); }
-    };
-    const handleKeyUp = (e: KeyboardEvent) => { keysPressed.current.delete(e.key); };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
-  }, [roomId, emit, gameOver, playClick]);
-
-  // Touch controls
+  // Touch controls - joystick style
   const touchRef = useRef<{ x: number; y: number } | null>(null);
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    const touch = e.touches[0];
+    touchRef.current = { x: touch.clientX, y: touch.clientY };
   };
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchRef.current || gameOver) return;
-    const dx = e.touches[0].clientX - touchRef.current.x;
-    const dy = e.touches[0].clientY - touchRef.current.y;
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-      emit('dodgeball:move', { roomId, dx: Math.sign(dx), dy: Math.sign(dy) });
-      touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchRef.current.x;
+    const dy = touch.clientY - touchRef.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 10) {
+      const now = Date.now();
+      if (now - lastMove.current > 50) {
+        emit('dodgeball:move', { roomId, dx: Math.sign(dx), dy: Math.sign(dy) });
+        lastMove.current = now;
+      }
+      touchRef.current = { x: touch.clientX, y: touch.clientY };
     }
   };
-  const handleTouchEnd = () => { touchRef.current = null; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    // Tap to throw (short touch without much movement)
+    if (touchRef.current) {
+      const endTouch = e.changedTouches[0];
+      const dx = endTouch.clientX - touchRef.current.x;
+      const dy = endTouch.clientY - touchRef.current.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 15) {
+        emit('dodgeball:throw', { roomId });
+        playClick();
+      }
+    }
+    touchRef.current = null;
+  };
 
   const resetGame = () => emit('dodgeball:reset', { roomId });
 
   return (
-    <div className="min-h-screen flex flex-col items-center p-4" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+    <div className="min-h-screen flex flex-col items-center p-4" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{ touchAction: 'none' }}>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-md">
         <div className="flex items-center justify-between mb-4">
-          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`)} className="flex items-center gap-2 text-love-600 font-bold">
+          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`); }} className="flex items-center gap-2 text-love-600 font-bold">
             <ArrowLeft size={20} /> Trocar Jogo
           </motion.button>
-          <h1 className="text-xl font-black text-love-700">🎯 Dodgeball</h1>
+          <h1 className="text-xl font-black text-love-700">🤾 Dodgeball</h1>
           <div className="flex gap-2">
             {gameOver && (
               <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={resetGame} className="p-2 rounded-full bg-love-100 text-love-600">
@@ -122,20 +152,17 @@ export default function Dodgeball() {
           ))}
         </div>
 
-        {/* Arena */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-3 shadow-xl border-2 border-love-100 overflow-hidden">
-          <svg width="400" height="300" viewBox="0 0 400 300" className="w-full h-auto">
+        {/* Arena - responsive SVG */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-2 shadow-xl border-2 border-love-100 overflow-hidden">
+          <svg viewBox="0 0 400 300" style={{ width: '100%', height: 'auto', display: 'block' }}>
             <rect width="400" height="300" fill="#fff1f2" rx="12" />
-            {/* Center line */}
             <line x1="200" y1="0" x2="200" y2="300" stroke="#fecdd3" strokeWidth="2" strokeDasharray="8,4" />
-            {/* Players */}
             {players.map((p, i) => (
               <g key={i}>
                 <circle cx={p.x} cy={p.y} r="18" fill={i === 0 ? '#f43f5e' : '#9333ea'} opacity={p.alive ? 1 : 0.3} />
                 <text x={p.x} y={p.y + 6} textAnchor="middle" fontSize="16">{p.alive ? (i === 0 ? '💕' : '💗') : '💀'}</text>
               </g>
             ))}
-            {/* Balls */}
             {balls.map((b, i) => (
               <circle key={i} cx={b.x} cy={b.y} r="6" fill="#fb923c" opacity="0.9" />
             ))}
@@ -149,8 +176,15 @@ export default function Dodgeball() {
           </motion.div>
         )}
 
+        {!connected && !gameOver && (
+          <div className="text-center py-8 text-love-400">
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} className="text-4xl mb-2">⏳</motion.div>
+            <p className="font-bold">Conectando...</p>
+          </div>
+        )}
+
         <div className="mt-3 text-center text-love-400 text-xs">
-          WASD/Setas = Mover | Espaço = Jogar bola
+          Arraste pra mover | Toque pra jogar bola
         </div>
       </motion.div>
       <Chat roomId={roomId || ''} playerName={playerName} />
