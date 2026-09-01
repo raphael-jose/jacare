@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="love" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fda4af"/>
+      <stop offset="100%" style="stop-color:#f43f5e"/>
+    </linearGradient>
+  </defs>
+  <path d="M50 88 C25 65, 5 45, 5 28 C5 12, 18 2, 32 2 C42 2, 48 8, 50 15 C52 8, 58 2, 68 2 C82 2, 95 12, 95 28 C95 45, 75 65, 50 88Z" fill="url(#love)"/>
+  <text x="50" y="55" text-anchor="middle" font-size="30" fill="white">🎮</text>
+</svg>

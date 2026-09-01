@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #fff1f2;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #fda4af;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #f43f5e;
+}
+
+/* Floating hearts background */
+.floating-hearts {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.heart {
+  position: absolute;
+  font-size: 20px;
+  opacity: 0.3;
+  animation: floatHeart linear infinite;
+}
+
+@keyframes floatHeart {
+  0% {
+    transform: translateY(100vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.3;
+  }
+  90% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-100px) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* Game card hover effect */
+.game-card {
+  @apply relative overflow-hidden rounded-3xl p-6 transition-all duration-300;
+  @apply hover:scale-105 hover:shadow-2xl hover:shadow-love-300/30;
+  @apply active:scale-95;
+}
+
+.game-card::before {
+  content: '';
+  @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.2) 0%, transparent 70%);
+}
+
+.game-card:hover::before {
+  @apply opacity-100;
+}
+
+/* Button styles */
+.btn-love {
+  @apply px-6 py-3 rounded-full font-bold text-white transition-all duration-200;
+  @apply bg-gradient-to-r from-love-400 to-love-600;
+  @apply hover:from-love-500 hover:to-love-700;
+  @apply hover:shadow-lg hover:shadow-love-300/50;
+  @apply active:scale-95 active:shadow-sm;
+}
+
+.btn-outline {
+  @apply px-6 py-3 rounded-full font-bold transition-all duration-200;
+  @apply border-2 border-love-400 text-love-600;
+  @apply hover:bg-love-500 hover:text-white;
+  @apply active:scale-95;
+}
+
+/* Input styles */
+.input-love {
+  @apply w-full px-4 py-3 rounded-2xl border-2 border-love-200 bg-white/80;
+  @apply focus:outline-none focus:border-love-400 focus:ring-4 focus:ring-love-100;
+  @apply transition-all duration-200 placeholder-love-300;
+}
+
+/* Glow effect */
+.glow {
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 0 20px rgba(244, 63, 94, 0.3);
+  }
+  to {
+    box-shadow: 0 0 40px rgba(244, 63, 94, 0.6);
+  }
+}
+
+/* Toast notification */
+.toast {
+  @apply fixed top-4 right-4 z-50 px-6 py-3 rounded-2xl font-bold;
+  @apply bg-white/90 backdrop-blur-sm shadow-xl;
+  @apply border-2 border-love-200 text-love-700;
+  @apply animate-bounce;
+}
