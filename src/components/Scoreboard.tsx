@@ -9,6 +9,10 @@ interface ScoreboardData {
     hangman: number;
     memory: number;
     words: number;
+    snake: number;
+    runner: number;
+    dodgeball: number;
+    kitchen: number;
     total: number;
   };
 }
@@ -23,6 +27,10 @@ const GAME_INFO: Record<string, { emoji: string; name: string }> = {
   hangman: { emoji: '🎯', name: 'Forca' },
   memory: { emoji: '🧠', name: 'Memoria' },
   words: { emoji: '✍️', name: 'Palavras' },
+  snake: { emoji: '🐍', name: 'Cobras' },
+  runner: { emoji: '🏃', name: 'Runner' },
+  dodgeball: { emoji: '🤾', name: 'Dodgeball' },
+  kitchen: { emoji: '🍳', name: 'Cozinha' },
 };
 
 export default function Scoreboard({ roomId, playerName }: ScoreboardProps) {
