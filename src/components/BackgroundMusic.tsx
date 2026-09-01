@@ -1,39 +1,162 @@
-import { useState, useEffect } from 'react';
-import { Music, X } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Music, X, Play, Pause, SkipForward, SkipBack, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSocket } from '../contexts/SocketContext';
+
+// YouTube IFrame API types
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: () => void;
+  }
+}
+
+const PLAYLIST_ID = 'PL0ao6cotJFFUyWGfYx1jCnQHtpshpg3A5';
 
 export default function BackgroundMusic() {
   const [showPlayer, setShowPlayer] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentSong, setCurrentSong] = useState('Gustavo Mioto');
+  const [playerReady, setPlayerReady] = useState(false);
+  const playerRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { emit, on } = useSocket();
 
+  // Load YouTube IFrame API
   useEffect(() => {
-    const handler = () => { setShowPlayer(true); setHasStarted(true); };
+    if (window.YT && window.YT.Player) return;
+    
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+
+    window.onYouTubeIframeAPIReady = () => {
+      if (containerRef.current && !playerRef.current) {
+        createPlayer();
+      }
+    };
+  }, []);
+
+  const createPlayer = useCallback(() => {
+    if (!containerRef.current || playerRef.current) return;
+    
+    playerRef.current = new window.YT.Player(containerRef.current, {
+      height: '0',
+      width: '0',
+      playerVars: {
+        listType: 'playlist',
+        list: PLAYLIST_ID,
+        autoplay: 0,
+        controls: 0,
+        disablekb: 1,
+        modestbranding: 1,
+        rel: 0,
+      },
+      events: {
+        onReady: () => setPlayerReady(true),
+        onStateChange: (event: any) => {
+          // YT.PlayerState.PLAYING = 1, PAUSED = 2, ENDED = 0
+          if (event.data === 1) setIsPlaying(true);
+          else if (event.data === 2) setIsPlaying(false);
+          else if (event.data === 0) {
+            // Song ended, next one auto-plays
+          }
+        },
+      },
+    });
+  }, []);
+
+  // Socket listeners for shared control
+  useEffect(() => {
+    const unsub1 = on('music:play', () => {
+      if (playerRef.current?.playVideo) {
+        playerRef.current.playVideo();
+      }
+    });
+
+    const unsub2 = on('music:pause', () => {
+      if (playerRef.current?.pauseVideo) {
+        playerRef.current.pauseVideo();
+      }
+    });
+
+    const unsub3 = on('music:next', () => {
+      if (playerRef.current?.nextVideo) {
+        playerRef.current.nextVideo();
+      }
+    });
+
+    const unsub4 = on('music:prev', () => {
+      if (playerRef.current?.previousVideo) {
+        playerRef.current.previousVideo();
+      }
+    });
+
+    const unsub5 = on('music:mute', () => {
+      if (playerRef.current?.mute) playerRef.current.mute();
+      setIsMuted(true);
+    });
+
+    const unsub6 = on('music:unmute', () => {
+      if (playerRef.current?.unMute) playerRef.current.unMute();
+      setIsMuted(false);
+    });
+
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
+  }, [on]);
+
+  // Listen for toggle-music custom event from Room banner
+  useEffect(() => {
+    const handler = () => setShowPlayer(true);
     window.addEventListener('toggle-music', handler);
     return () => window.removeEventListener('toggle-music', handler);
   }, []);
 
-  const togglePlayer = () => {
-    if (!hasStarted) setHasStarted(true);
-    setShowPlayer(!showPlayer);
+  const handlePlay = () => {
+    if (!playerReady || !playerRef.current) return;
+    playerRef.current.playVideo();
+    emit('music:play');
   };
+
+  const handlePause = () => {
+    if (!playerReady || !playerRef.current) return;
+    playerRef.current.pauseVideo();
+    emit('music:pause');
+  };
+
+  const handleNext = () => {
+    if (!playerReady || !playerRef.current) return;
+    playerRef.current.nextVideo();
+    emit('music:next');
+  };
+
+  const handlePrev = () => {
+    if (!playerReady || !playerRef.current) return;
+    playerRef.current.previousVideo();
+    emit('music:prev');
+  };
+
+  const handleMute = () => {
+    if (!playerReady || !playerRef.current) return;
+    if (isMuted) {
+      playerRef.current.unMute();
+      emit('music:unmute');
+    } else {
+      playerRef.current.mute();
+      emit('music:mute');
+    }
+  };
+
+  const togglePlayer = () => setShowPlayer(!showPlayer);
 
   return (
     <>
-      {/* Always-mounted hidden iframe to keep music playing */}
-      {hasStarted && (
-        <div className="fixed -left-[9999px] -top-[9999px] w-0 h-0 opacity-0 pointer-events-none">
-          <iframe
-            src="https://www.youtube.com/embed/videoseries?list=PL0ao6cotJFFUyWGfYx1jCnQHtpshpg3A5&autoplay=1&mute=0"
-            width="1"
-            height="1"
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      )}
+      {/* Hidden YouTube player container */}
+      <div ref={containerRef} style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
 
-      {/* Toggle button - bottom center to avoid overlapping */}
+      {/* Controls */}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center">
         <AnimatePresence>
           {showPlayer && (
@@ -41,24 +164,36 @@ export default function BackgroundMusic() {
               initial={{ opacity: 0, y: 20, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.9 }}
-              className="mb-3 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border-2 border-love-100 overflow-hidden"
-              style={{ width: 300 }}
+              className="mb-3 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border-2 border-love-100 overflow-hidden p-3"
+              style={{ width: 280 }}
             >
-              <div className="p-2 bg-gradient-to-r from-love-400 to-love-600 text-white flex items-center justify-between">
-                <p className="font-bold text-xs">🎵 Gustavo Mioto</p>
-                <button onClick={() => setShowPlayer(false)} className="text-white/80 hover:text-white">
-                  <X size={16} />
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-bold text-xs text-love-600">🎵 Gustavo Mioto</p>
+                <button onClick={() => setShowPlayer(false)} className="text-love-300 hover:text-love-500">
+                  <X size={14} />
                 </button>
               </div>
-              <iframe
-                src="https://www.youtube.com/embed/videoseries?list=PL0ao6cotJFFUyWGfYx1jCnQHtpshpg3A5&autoplay=0"
-                width="300"
-                height="180"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                style={{ borderRadius: '0 0 12px 12px' }}
-              />
+
+              <p className="text-xs text-love-400 text-center mb-2">Controle compartilhado 💕</p>
+
+              {/* Controls */}
+              <div className="flex items-center justify-center gap-3">
+                <button onClick={handlePrev} className="w-9 h-9 rounded-full bg-love-50 text-love-500 flex items-center justify-center hover:bg-love-100 transition">
+                  <SkipBack size={16} />
+                </button>
+                <button onClick={isPlaying ? handlePause : handlePlay}
+                  className="w-12 h-12 rounded-full bg-gradient-to-r from-love-400 to-love-600 text-white flex items-center justify-center shadow-md hover:shadow-lg transition">
+                  {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
+                </button>
+                <button onClick={handleNext} className="w-9 h-9 rounded-full bg-love-50 text-love-500 flex items-center justify-center hover:bg-love-100 transition">
+                  <SkipForward size={16} />
+                </button>
+                <button onClick={handleMute} className="w-9 h-9 rounded-full bg-love-50 text-love-500 flex items-center justify-center hover:bg-love-100 transition">
+                  {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                </button>
+              </div>
+
+              <p className="text-[10px] text-love-300 text-center mt-2">⏸️ ▶️ ⏭️ 🔊 Ambos controlam</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -68,8 +203,8 @@ export default function BackgroundMusic() {
           whileTap={{ scale: 0.9 }}
           onClick={togglePlayer}
           className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-colors ${
-            hasStarted
-              ? 'bg-gradient-to-r from-love-400 to-love-600 text-white'
+            isPlaying
+              ? 'bg-gradient-to-r from-love-400 to-love-600 text-white animate-pulse'
               : 'bg-white/80 text-love-400 border-2 border-love-200'
           }`}
         >

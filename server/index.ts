@@ -517,6 +517,15 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
+  // ===== SHARED MUSIC CONTROL =====
+
+  const musicEvents = ['music:play', 'music:pause', 'music:next', 'music:prev', 'music:mute', 'music:unmute'];
+  for (const event of musicEvents) {
+    socket.on(event, ({ roomId }: { roomId: string }) => {
+      socket.to(roomId).emit(event);
+    });
+  }
+
   // ===== NEW GAMES =====
 
   socket.on('snake:join', ({ roomId }: { roomId: string }) => {
