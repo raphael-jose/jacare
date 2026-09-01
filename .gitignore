@@ -7,3 +7,6 @@ dist-ssr
 .env.*.local
 *.log
 .freebuff
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
