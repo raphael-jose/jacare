@@ -237,6 +237,17 @@ export default function Room() {
           )}
         </AnimatePresence>
 
+        {/* Music banner */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-gradient-to-r from-love-400 to-love-600 rounded-3xl p-4 mb-4 text-white text-center cursor-pointer"
+          onClick={() => window.dispatchEvent(new CustomEvent('toggle-music'))}
+        >
+          <p className="font-bold text-sm">🎵 Gustavo Mioto - Românticas</p>
+          <p className="text-xs text-love-100">Clique pra tocar enquanto jogam! 💕</p>
+        </motion.div>
+
         {/* Waiting animation */}
         {waiting && (
           <motion.div

@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Music, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function BackgroundMusic() {
   const [showPlayer, setShowPlayer] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setShowPlayer(true);
+    window.addEventListener('toggle-music', handler);
+    return () => window.removeEventListener('toggle-music', handler);
+  }, []);
 
   return (
     <div className="fixed bottom-4 left-4 z-50">
