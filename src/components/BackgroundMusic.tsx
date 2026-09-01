@@ -37,14 +37,15 @@ export default function BackgroundMusic() {
           >
             <div className="p-3 bg-gradient-to-r from-love-400 to-love-600 text-white">
               <p className="font-bold text-sm">🎵 Gustavo Mioto - Românticas</p>
-              <p className="text-xs text-love-100">Toque no play e curtam juntos! 💕</p>
+              <p className="text-xs text-love-100">Música inteira grátis! Toque no play! 💕</p>
             </div>
             <iframe
-              src="https://open.spotify.com/embed/playlist/78CYw5FKxxxHPcvYhiZWNi?utm_source=generator&theme=0"
+              src="https://www.youtube.com/embed/videoseries?list=PL0ao6cotJFFUyWGfYx1jCnQHtpshpg3A5&autoplay=0"
               width="320"
               height="380"
               frameBorder="0"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
               loading="lazy"
               style={{ borderRadius: '0 0 12px 12px' }}
             />
