@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Copy, Check, Heart, Users, Gamepad2, Sparkles } from 'lucide-react';
-import { useSocket } from '../hooks/useSocket';
+import { useSocket } from '../contexts/SocketContext';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
 
@@ -21,14 +21,29 @@ export default function Room() {
 
   const playerName = searchParams.get('name') || 'Jogador';
   const avatar = searchParams.get('avatar') || '🐱';
-  const [players, setPlayers] = useState<{ name: string; avatar: string }[]>([{ name: playerName, avatar }]);
+  const isCreator = searchParams.get('creator') === '1';
+  const [players, setPlayers] = useState<{ name: string; avatar: string }[]>(isCreator ? [{ name: playerName, avatar }] : []);
   const [copied, setCopied] = useState(false);
   const [waiting, setWaiting] = useState(true);
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
   useEffect(() => {
-    // Try to join the room
-    emit('room:join', { roomId, playerName, avatar });
+    // Creator already joined via room:create, only joiners need to emit room:join
+    // Request current room state (works for both creator and joiner)
+    emit('room:getState', { roomId });
+
+    if (!isCreator) {
+      emit('room:join', { roomId, playerName, avatar });
+    }
+
+    const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
+      setPlayers(data.players);
+      if (data.players.length >= 2) setWaiting(false);
+      // If game already selected, navigate to it
+      if (data.gameType) {
+        navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
+      }
+    });
 
     const unsub1 = on('room:joined', (data: { roomId: string; players: { name: string; avatar: string }[] }) => {
       setPlayers(data.players);
@@ -49,7 +64,7 @@ export default function Room() {
       navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}`);
     });
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); };
   }, [roomId, playerName, emit, on, navigate]);
 
   const copyCode = async () => {

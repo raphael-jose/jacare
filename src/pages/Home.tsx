@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Sparkles, Users, Plus } from 'lucide-react';
-import { useSocket } from '../hooks/useSocket';
+import { useSocket } from '../contexts/SocketContext';
 import AvatarPicker from '../components/AvatarPicker';
 
 const containerVariants = {
@@ -26,7 +26,7 @@ export default function Home() {
 
   useEffect(() => {
     const unsub1 = on('room:created', (data: { roomId: string }) => {
-      navigate(`/room/${data.roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
+      navigate(`/room/${data.roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}&creator=1`);
     });
 
     const unsub2 = on('room:error', (data: { message: string }) => {

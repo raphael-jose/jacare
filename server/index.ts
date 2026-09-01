@@ -114,6 +114,20 @@ io.on('connection', (socket: Socket) => {
     console.log(`💕 ${playerName} entrou na sala ${roomId}`);
   });
 
+  // Room state request (for page refresh / navigation)
+  socket.on('room:getState', ({ roomId }: { roomId: string }) => {
+    const room = rooms.get(roomId);
+    if (!room) {
+      socket.emit('room:error', { message: 'Sala nao encontrada! 😢' });
+      return;
+    }
+    // Re-join the socket to the room if not already in it
+    socket.join(roomId);
+    socket.data = { roomId, playerName: room.players.find(p => p.id === socket.id)?.name || '' };
+    const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+    socket.emit('room:state', { players: playersData, gameType: room.gameType });
+  });
+
   // ===== GAME SELECTION =====
 
   socket.on('room:selectGame', ({ roomId, gameType }: { roomId: string; gameType: string }) => {

@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/floatinghearts.tsx","./src/hooks/usesocket.ts","./src/pages/hangman.tsx","./src/pages/home.tsx","./src/pages/lobby.tsx","./src/pages/memorygame.tsx","./src/pages/tictactoe.tsx","./src/pages/wordgame.tsx","./server/index.ts"],"version":"5.9.3"}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, RotateCcw, Heart, Zap, Check, X, ArrowRight } from 'lucide-react';
-import { useSocket } from '../hooks/useSocket';
+import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
