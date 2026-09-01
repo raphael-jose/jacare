@@ -41,7 +41,7 @@ export default function Lobby() {
     });
 
     const unsub3 = on('room:error', (data: { message: string }) => {
-      alert(data.message);
+      showError(data.message);
       setWaiting(false);
       setIsCreating(false);
     });

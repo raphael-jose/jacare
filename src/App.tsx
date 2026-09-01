@@ -9,7 +9,6 @@ import WordGame from './pages/WordGame';
 import SnakeRace from './pages/SnakeRace';
 import Runner from './pages/Runner';
 import Dodgeball from './pages/Dodgeball';
-import Kitchen from './pages/Kitchen';
 import FloatingHearts from './components/FloatingHearts';
 import BackgroundMusic from './components/BackgroundMusic';
 
@@ -30,7 +29,6 @@ function App() {
             <Route path="/game/snake/:roomId" element={<SnakeRace />} />
             <Route path="/game/runner/:roomId" element={<Runner />} />
             <Route path="/game/dodgeball/:roomId" element={<Dodgeball />} />
-            <Route path="/game/kitchen/:roomId" element={<Kitchen />} />
           </Routes>
         </div>
       </div>

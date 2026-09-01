@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, RotateCcw, Heart, ArrowRight } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
+import { showError } from '../utils/alert';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
 
@@ -87,7 +88,7 @@ export default function Hangman() {
     });
 
     const unsub8 = on('game:playerLeft', (data: { playerName: string }) => {
-      alert(`${data.playerName} saiu do jogo 😢`);
+      showError(`${data.playerName} saiu do jogo 😢`);
       navigate('/');
     });
 

@@ -5,6 +5,7 @@ import { ArrowLeft, Copy, Check, Heart, Users, Gamepad2, Sparkles } from 'lucide
 import { useSocket } from '../contexts/SocketContext';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
+import { showError } from '../utils/alert';
 
 const GAMES = [
   { id: 'tictactoe', name: 'Jogo da Velha', emoji: '❌⭕', description: 'O classico jogo da velha, mas mais fofo!', color: 'from-rose-400 to-pink-500', bg: 'bg-rose-50', border: 'border-rose-200' },
@@ -14,7 +15,6 @@ const GAMES = [
   { id: 'snake', name: 'Corrida de Cobras', emoji: '🐍', description: 'Compete por comida! Quem crescer mais vence!', color: 'from-green-400 to-emerald-500', bg: 'bg-green-50', border: 'border-green-200' },
   { id: 'runner', name: 'Runner Competitivo', emoji: '🏃', description: 'Corra e desvie de obstaculos lado a lado!', color: 'from-orange-400 to-red-500', bg: 'bg-orange-50', border: 'border-orange-200' },
   { id: 'dodgeball', name: 'Dodgeball', emoji: '🤾', description: 'Jogue bolas uma na outra! Quem acertar mais vence!', color: 'from-violet-400 to-purple-500', bg: 'bg-violet-50', border: 'border-violet-200' },
-  { id: 'kitchen', name: 'Cozinha Caotica', emoji: '🍳', description: 'Cozinhe juntos contra o tempo! Tipo Overcooked!', color: 'from-yellow-400 to-amber-500', bg: 'bg-yellow-50', border: 'border-yellow-200' },
 ];
 
 export default function Room() {
@@ -60,8 +60,7 @@ export default function Room() {
     });
 
     const unsub3 = on('room:error', (data: { message: string }) => {
-      alert(data.message);
-      navigate('/');
+      showError(data.message).then(() => navigate('/'));
     });
 
     const unsub4 = on('room:gameSelected', (data: { gameType: string }) => {

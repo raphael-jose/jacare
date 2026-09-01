@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Heart, Sparkles, Users, Plus } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import AvatarPicker from '../components/AvatarPicker';
+import { showError } from '../utils/alert';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -20,9 +21,12 @@ export default function Home() {
   const [searchParams] = useSearchParams();
   const { emit, on } = useSocket();
   
+  const joinCode = searchParams.get('join')?.toUpperCase() || '';
+  const isInvite = !!joinCode;
+
   const [playerName, setPlayerName] = useState('');
   const [avatar, setAvatar] = useState('🐱');
-  const [roomCode, setRoomCode] = useState(searchParams.get('join')?.toUpperCase() || '');
+  const [roomCode, setRoomCode] = useState(joinCode);
   const [isJoining, setIsJoining] = useState(false);
 
   useEffect(() => {
@@ -31,7 +35,7 @@ export default function Home() {
     });
 
     const unsub2 = on('room:error', (data: { message: string }) => {
-      alert(data.message);
+      showError(data.message);
       setIsJoining(false);
     });
 
@@ -70,7 +74,9 @@ export default function Home() {
           </motion.div>
           
           <h1 className="text-4xl font-black text-love-700 mb-2">Love Games</h1>
-          <p className="text-love-500 font-bold text-lg">Jogos fofos para jogar com seu amor 💕</p>
+          <p className="text-love-500 font-bold text-lg">
+            {isInvite ? 'Entre na sala do seu amor! 💕' : 'Jogos fofos para jogar com seu amor 💕'}
+          </p>
           <div className="flex items-center justify-center gap-2 mt-2 text-love-400 text-sm">
             <Sparkles size={14} />
             <span>Multiplayer online</span>
@@ -93,7 +99,7 @@ export default function Home() {
               placeholder="Como seu amor te chama?"
               className="input-love"
               maxLength={20}
-              onKeyPress={(e) => e.key === 'Enter' && !isJoining && createRoom()}
+              onKeyPress={(e) => e.key === 'Enter' && !isJoining && joinRoom()}
             />
           </div>
 
@@ -102,66 +108,89 @@ export default function Home() {
             <AvatarPicker selected={avatar} onSelect={setAvatar} />
           </div>
 
-          {/* Create room */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={createRoom}
-            disabled={!playerName.trim() || isJoining}
-            className="w-full btn-love mb-4 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus size={20} />
-            Criar Sala
-          </motion.button>
+          {isInvite ? (
+            /* INVITE MODE: Only show join button */
+            <>
+              <div className="bg-love-50 rounded-2xl p-4 mb-4 border-2 border-love-200 text-center">
+                <p className="text-sm text-love-500 font-bold mb-1">Código da sala:</p>
+                <span className="text-3xl font-black text-love-600 tracking-[0.3em]">{roomCode}</span>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={joinRoom}
+                disabled={!playerName.trim() || isJoining}
+                className="w-full btn-love flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Users size={20} />
+                Entrar na Sala
+              </motion.button>
+            </>
+          ) : (
+            /* NORMAL MODE: Show both create and join */
+            <>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={createRoom}
+                disabled={!playerName.trim() || isJoining}
+                className="w-full btn-love mb-4 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus size={20} />
+                Criar Sala
+              </motion.button>
 
-          <div className="flex items-center gap-4 my-4">
-            <div className="flex-1 h-px bg-love-200" />
-            <span className="text-love-400 font-bold text-sm">OU</span>
-            <div className="flex-1 h-px bg-love-200" />
-          </div>
+              <div className="flex items-center gap-4 my-4">
+                <div className="flex-1 h-px bg-love-200" />
+                <span className="text-love-400 font-bold text-sm">OU</span>
+                <div className="flex-1 h-px bg-love-200" />
+              </div>
 
-          {/* Join room */}
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={roomCode}
-              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-              placeholder="Codigo da sala"
-              className="input-love text-center text-lg font-bold tracking-widest uppercase"
-              maxLength={6}
-              onKeyPress={(e) => e.key === 'Enter' && joinRoom()}
-            />
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={joinRoom}
-              disabled={!playerName.trim() || !roomCode.trim()}
-              className="w-full btn-outline flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Users size={20} />
-              Entrar na Sala
-            </motion.button>
-          </div>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={roomCode}
+                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                  placeholder="Codigo da sala"
+                  className="input-love text-center text-lg font-bold tracking-widest uppercase"
+                  maxLength={6}
+                  onKeyPress={(e) => e.key === 'Enter' && joinRoom()}
+                />
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={joinRoom}
+                  disabled={!playerName.trim() || !roomCode.trim()}
+                  className="w-full btn-outline flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Users size={20} />
+                  Entrar na Sala
+                </motion.button>
+              </div>
+            </>
+          )}
         </motion.div>
 
-        {/* How it works */}
-        <motion.div variants={itemVariants} className="mt-6 bg-white/60 backdrop-blur-sm rounded-3xl p-5 border-2 border-love-100">
-          <h3 className="font-bold text-love-700 text-sm mb-3 text-center">Como funciona? 🤔</h3>
-          <div className="space-y-2 text-sm text-love-600">
-            <div className="flex items-start gap-3">
-              <span className="text-lg">1️⃣</span>
-              <p>Crie uma sala e envie o codigo para seu parceiro</p>
+        {/* How it works (only in normal mode) */}
+        {!isInvite && (
+          <motion.div variants={itemVariants} className="mt-6 bg-white/60 backdrop-blur-sm rounded-3xl p-5 border-2 border-love-100">
+            <h3 className="font-bold text-love-700 text-sm mb-3 text-center">Como funciona? 🤔</h3>
+            <div className="space-y-2 text-sm text-love-600">
+              <div className="flex items-start gap-3">
+                <span className="text-lg">1️⃣</span>
+                <p>Crie uma sala e envie o codigo para seu parceiro</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="text-lg">2️⃣</span>
+                <p>Quando os dois entrarem, escolham um jogo juntos</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="text-lg">3️⃣</span>
+                <p>Joguem e se divirtam! Tem chat tambem! 💬</p>
+              </div>
             </div>
-            <div className="flex items-start gap-3">
-              <span className="text-lg">2️⃣</span>
-              <p>Quando os dois entrarem, escolham um jogo juntos</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-lg">3️⃣</span>
-              <p>Joguem e se divirtam! Tem chat tambem! 💬</p>
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         {/* Footer */}
         <motion.div variants={itemVariants} className="text-center mt-6 text-love-400 text-sm">
