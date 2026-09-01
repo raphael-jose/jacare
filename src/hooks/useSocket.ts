@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client';
 const SOCKET_URL = import.meta.env.VITE_SERVER_URL ||
   (window.location.hostname === 'localhost'
     ? 'http://localhost:3001'
-    : window.location.origin);
+    : 'https://jacare-jp86.onrender.com');
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
