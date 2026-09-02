@@ -240,8 +240,10 @@ io.on('connection', (socket: Socket) => {
 
   // Room state request (for page refresh / navigation)
   socket.on('room:getState', ({ roomId, playerName, avatar }: { roomId: string; playerName?: string; avatar?: string }) => {
+    console.log(`📋 getState: ${playerName} pediu estado da sala ${roomId}`);
     const room = rooms.get(roomId);
     if (!room) {
+      console.log(`❌ Sala ${roomId} nao encontrada`);
       socket.emit('room:error', { message: 'Sala nao encontrada! 😢' });
       return;
     }
@@ -285,7 +287,9 @@ io.on('connection', (socket: Socket) => {
     const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
     socket.emit('room:state', { players: playersData, gameType: room.gameType });
 
+    console.log(`📋 getState: sala ${roomId} tem ${room.players.length} jogadores, didJoin=${didJoin}`);
     if (didJoin) {
+      console.log(`✅ ${pName} entrou na sala ${roomId} via getState`);
       socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName: pName });
     }
   });

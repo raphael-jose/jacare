@@ -18,7 +18,7 @@ export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { emit, on } = useSocket();
+  const { emit, on, connected } = useSocket();
 
   const playerName = searchParams.get('name') || 'Jogador';
   const avatar = searchParams.get('avatar') || '🐱';
@@ -28,14 +28,11 @@ export default function Room() {
   const [waiting, setWaiting] = useState(true);
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
+  // Register listeners ONCE on mount
   useEffect(() => {
-    // Single call: getState handles both reading state AND joining the room
-    emit('room:getState', { roomId, playerName, avatar });
-
     const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
       setPlayers(data.players);
       if (data.players.length >= 2) setWaiting(false);
-      // If game already selected, navigate to it
       if (data.gameType) {
         navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
       }
@@ -58,13 +55,19 @@ export default function Room() {
       emit('room:getState', { roomId, playerName, avatar });
     });
 
-    // Retry after 1s to handle network latency
-    const retryTimer = setTimeout(() => {
-      emit('room:getState', { roomId, playerName, avatar });
-    }, 1000);
-
-    return () => { unsub0(); unsub2(); unsub3(); unsub4(); unsub5(); clearTimeout(retryTimer); };
+    return () => { unsub0(); unsub2(); unsub3(); unsub4(); unsub5(); };
   }, [roomId, playerName, avatar, emit, on, navigate]);
+
+  // Emit room:getState whenever connected changes to true
+  useEffect(() => {
+    if (!connected) return;
+    // Emit immediately when connected
+    emit('room:getState', { roomId, playerName, avatar });
+    // Also retry at intervals in case of brief disconnects
+    const intervals = [1000, 3000, 5000];
+    const timers = intervals.map(ms => setTimeout(() => emit('room:getState', { roomId, playerName, avatar }), ms));
+    return () => timers.forEach(clearTimeout);
+  }, [connected, roomId, playerName, avatar, emit]);
 
   const copyCode = async () => {
     await navigator.clipboard.writeText(roomId || '');
