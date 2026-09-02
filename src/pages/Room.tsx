@@ -18,7 +18,7 @@ export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { emit, on, connected } = useSocket();
+  const { emit, on } = useSocket();
 
   const playerName = searchParams.get('name') || 'Jogador';
   const avatar = searchParams.get('avatar') || '🐱';
@@ -28,9 +28,11 @@ export default function Room() {
   const [waiting, setWaiting] = useState(true);
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
-  // Register listeners ONCE on mount
+  // Single effect: register listeners AND emit join — simple and robust
   useEffect(() => {
+    // 1) Register ALL listeners FIRST
     const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
+      console.log('[Room] room:state received', data.players?.length, 'players');
       setPlayers(data.players);
       if (data.players.length >= 2) setWaiting(false);
       if (data.gameType) {
@@ -39,11 +41,13 @@ export default function Room() {
     });
 
     const unsub2 = on('room:playerJoined', (data: { players: { name: string; avatar: string }[]; playerName: string }) => {
+      console.log('[Room] room:playerJoined received', data.playerName);
       setPlayers(data.players);
       setWaiting(false);
     });
 
     const unsub3 = on('room:error', (data: { message: string }) => {
+      console.log('[Room] room:error', data.message);
       showError(data.message).then(() => navigate('/'));
     });
 
@@ -55,19 +59,21 @@ export default function Room() {
       emit('room:getState', { roomId, playerName, avatar });
     });
 
-    return () => { unsub0(); unsub2(); unsub3(); unsub4(); unsub5(); };
-  }, [roomId, playerName, avatar, emit, on, navigate]);
+    // 2) Emit room:getState with aggressive retries
+    //    Socket.io buffers events if not connected yet, so emitting immediately is safe
+    const joinRoom = () => emit('room:getState', { roomId, playerName, avatar });
+    joinRoom(); // immediate
+    const timers = [500, 1000, 2000, 3000, 5000, 8000, 12000].map(
+      ms => setTimeout(joinRoom, ms)
+    );
 
-  // Emit room:getState whenever connected changes to true
-  useEffect(() => {
-    if (!connected) return;
-    // Emit immediately when connected
-    emit('room:getState', { roomId, playerName, avatar });
-    // Also retry at intervals in case of brief disconnects
-    const intervals = [1000, 3000, 5000];
-    const timers = intervals.map(ms => setTimeout(() => emit('room:getState', { roomId, playerName, avatar }), ms));
-    return () => timers.forEach(clearTimeout);
-  }, [connected, roomId, playerName, avatar, emit]);
+    console.log('[Room] Mounted, registering listeners and joining room', roomId, 'as', playerName);
+
+    return () => {
+      unsub0(); unsub2(); unsub3(); unsub4(); unsub5();
+      timers.forEach(clearTimeout);
+    };
+  }, [roomId, playerName, avatar, emit, on, navigate]);
 
   const copyCode = async () => {
     await navigator.clipboard.writeText(roomId || '');

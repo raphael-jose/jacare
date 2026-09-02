@@ -240,58 +240,68 @@ io.on('connection', (socket: Socket) => {
 
   // Room state request (for page refresh / navigation)
   socket.on('room:getState', ({ roomId, playerName, avatar }: { roomId: string; playerName?: string; avatar?: string }) => {
-    console.log(`📋 getState: ${playerName} pediu estado da sala ${roomId}`);
+    const pName = playerName || '';
+    const pAvatar = avatar || '🐱';
+    console.log(`📋 getState: '${pName}' pediu estado da sala ${roomId} (socket: ${socket.id})`);
+
     const room = rooms.get(roomId);
     if (!room) {
       console.log(`❌ Sala ${roomId} nao encontrada`);
-      socket.emit('room:error', { message: 'Sala nao encontrada! 😢' });
+      socket.emit('room:error', { message: 'Sala nao encontrada!' });
       return;
     }
+
     socket.join(roomId);
-    socket.data = { roomId, playerName: playerName || '' };
+    socket.data = { roomId, playerName: pName };
 
-    const pName = playerName || '';
-    const pAvatar = avatar || '🐱';
-    let didJoin = false;
-
-    // Check grace period first
+    // 1) Cancel any grace period for this player
     const disconnectKey = `${roomId}:${pName}`;
     const graceEntry = disconnectedPlayers.get(disconnectKey);
     if (graceEntry) {
       clearTimeout(graceEntry.timer);
       disconnectedPlayers.delete(disconnectKey);
-      const idx = room.players.findIndex(p => p.name === pName);
-      if (idx >= 0) {
-        room.players[idx].id = socket.id;
-        room.players[idx].avatar = pAvatar;
-      }
-      console.log(`🔄 ${pName} reconectou via getState`);
+      console.log(`🔄 ${pName} cancelou grace period`);
     }
 
-    // Check if this socket is already in the room
+    // 2) Simple: is this socket already in the room?
     const existingIdx = room.players.findIndex(p => p.id === socket.id);
     if (existingIdx >= 0) {
-      if (pName) room.players[existingIdx].name = pName;
-      if (avatar) room.players[existingIdx].avatar = pAvatar;
-    } else {
-      const nameIdx = room.players.findIndex(p => p.name === pName);
-      if (nameIdx >= 0) {
-        room.players[nameIdx].id = socket.id;
-        room.players[nameIdx].avatar = pAvatar;
-      } else if (pName && room.players.length < room.maxPlayers) {
-        room.players.push({ id: socket.id, name: pName, avatar: pAvatar });
-        didJoin = true;
-      }
+      // Already in room — just update info and return state
+      room.players[existingIdx].name = pName || room.players[existingIdx].name;
+      room.players[existingIdx].avatar = pAvatar;
+      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+      socket.emit('room:state', { players: playersData, gameType: room.gameType });
+      console.log(`📋 ${pName} ja esta na sala (${room.players.length} jogadores)`);
+      return;
     }
 
+    // 3) Not in room by socket.id — check by name (reconnection)
+    const nameIdx = room.players.findIndex(p => p.name === pName);
+    if (nameIdx >= 0) {
+      // Same name found — update socket.id (reconnection)
+      room.players[nameIdx].id = socket.id;
+      room.players[nameIdx].avatar = pAvatar;
+      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+      socket.emit('room:state', { players: playersData, gameType: room.gameType });
+      socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName: pName });
+      console.log(`🔄 ${pName} reconectou por nome`);
+      return;
+    }
+
+    // 4) New player — add to room if there's space
+    if (pName && room.players.length < room.maxPlayers) {
+      room.players.push({ id: socket.id, name: pName, avatar: pAvatar });
+      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+      socket.emit('room:state', { players: playersData, gameType: room.gameType });
+      socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName: pName });
+      console.log(`✅ ${pName} ENTROU na sala ${roomId} (${room.players.length} jogadores)`);
+      return;
+    }
+
+    // 5) Room full or no name — just return current state
     const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
     socket.emit('room:state', { players: playersData, gameType: room.gameType });
-
-    console.log(`📋 getState: sala ${roomId} tem ${room.players.length} jogadores, didJoin=${didJoin}`);
-    if (didJoin) {
-      console.log(`✅ ${pName} entrou na sala ${roomId} via getState`);
-      socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName: pName });
-    }
+    console.log(`📋 ${pName} sala cheia ou sem nome (${room.players.length}/${room.maxPlayers})`);
   });
 
   // ===== GAME SELECTION =====
