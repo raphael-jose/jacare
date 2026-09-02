@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 const SOCKET_URL = import.meta.env.VITE_SERVER_URL ||
@@ -11,22 +11,37 @@ interface SocketContextType {
   emit: (event: string, ...args: any[]) => void;
   on: (event: string, callback: (...args: any[]) => void) => () => void;
   isConnected: () => boolean;
+  connected: boolean;
 }
 
 const SocketContext = createContext<SocketContextType | null>(null);
 
 export function SocketProvider({ children }: { children: ReactNode }) {
-  const socketRef = useRef<Socket | null>(null);
-
-  useEffect(() => {
-    const socket = io(SOCKET_URL, {
+  // Create socket SYNCHRONOUSLY so children's effects can use it immediately
+  const socketRef = useRef<Socket>(
+    io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
-    });
+    })
+  );
 
-    socketRef.current = socket;
+  const [connected, setConnected] = useState(socketRef.current.connected);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+
+    const onConnect = () => setConnected(true);
+    const onDisconnect = () => setConnected(false);
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    // Set initial state if already connected
+    if (socket.connected) setConnected(true);
 
     return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
       socket.disconnect();
     };
   }, []);
@@ -43,7 +58,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <SocketContext.Provider value={{ socket: socketRef, emit, on, isConnected: () => socketRef.current?.connected ?? false }}>
+    <SocketContext.Provider value={{ socket: socketRef, emit, on, isConnected: () => socketRef.current?.connected ?? false, connected }}>
       {children}
     </SocketContext.Provider>
   );

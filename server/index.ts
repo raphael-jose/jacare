@@ -219,13 +219,44 @@ io.on('connection', (socket: Socket) => {
   socket.on('room:getState', ({ roomId, playerName, avatar }: { roomId: string; playerName?: string; avatar?: string }) => {
     const room = rooms.get(roomId);
     if (!room) {
-      socket.emit('room:error', { message: 'Sala nao encontrada!' });
+      socket.emit('room:error', { message: 'Sala nao encontrada! 😢' });
       return;
     }
     socket.join(roomId);
-    socket.data = { roomId, playerName: room.players.find(p => p.id === socket.id)?.name || playerName || '' };
+    socket.data = { roomId, playerName: playerName || '' };
+
+    // Handle player joining via getState (for invite link flow)
+    const pName = playerName || '';
+    const pAvatar = avatar || '🐱';
+    let didJoin = false;
+
+    // Check if this socket is already in the room
+    const existingIdx = room.players.findIndex(p => p.id === socket.id);
+    if (existingIdx >= 0) {
+      // Update existing player info
+      if (pName) room.players[existingIdx].name = pName;
+      if (avatar) room.players[existingIdx].avatar = pAvatar;
+    } else {
+      // Check by name for reconnection
+      const nameIdx = room.players.findIndex(p => p.name === pName);
+      if (nameIdx >= 0) {
+        room.players[nameIdx].id = socket.id;
+        room.players[nameIdx].avatar = pAvatar;
+        didJoin = true;
+      } else if (pName && room.players.length < room.maxPlayers) {
+        // New player - add to room
+        room.players.push({ id: socket.id, name: pName, avatar: pAvatar });
+        didJoin = true;
+      }
+    }
+
     const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
     socket.emit('room:state', { players: playersData, gameType: room.gameType });
+
+    // Notify others if a new player joined
+    if (didJoin) {
+      socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName: pName });
+    }
   });
 
   // ===== GAME SELECTION =====

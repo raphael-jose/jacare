@@ -30,9 +30,7 @@ export default function Room() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
   useEffect(() => {
-    // Ensure we're in the room (server handles duplicates gracefully)
-    emit('room:join', { roomId, playerName, avatar });
-    // Also get current state
+    // Single call: getState handles both reading state AND joining the room
     emit('room:getState', { roomId, playerName, avatar });
 
     const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
@@ -43,17 +41,6 @@ export default function Room() {
         navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
       }
     });
-
-    const unsub1 = on('room:joined', (data: { roomId: string; players: { name: string; avatar: string }[] }) => {
-      setPlayers(data.players);
-      if (data.players.length >= 2) setWaiting(false);
-    });
-
-    // Retry to handle race conditions and ensure sync
-    const retryTimer = setTimeout(() => {
-      emit('room:join', { roomId, playerName, avatar });
-      emit('room:getState', { roomId, playerName, avatar });
-    }, 1000);
 
     const unsub2 = on('room:playerJoined', (data: { players: { name: string; avatar: string }[]; playerName: string }) => {
       setPlayers(data.players);
@@ -69,12 +56,16 @@ export default function Room() {
     });
 
     const unsub5 = on('room:backToRoom', () => {
-      // Other player came back to room, refresh state
       emit('room:getState', { roomId, playerName, avatar });
     });
 
-    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); clearTimeout(retryTimer); };
-  }, [roomId, playerName, emit, on, navigate]);
+    // Retry after 1s to handle network latency
+    const retryTimer = setTimeout(() => {
+      emit('room:getState', { roomId, playerName, avatar });
+    }, 1000);
+
+    return () => { unsub0(); unsub2(); unsub3(); unsub4(); unsub5(); clearTimeout(retryTimer); };
+  }, [roomId, playerName, avatar, emit, on, navigate]);
 
   const copyCode = async () => {
     await navigator.clipboard.writeText(roomId || '');
