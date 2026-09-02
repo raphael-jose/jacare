@@ -5,6 +5,7 @@ import { Heart, Sparkles, Users, Plus } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import AvatarPicker from '../components/AvatarPicker';
 import { showError } from '../utils/alert';
+import { savePlayerInfo } from '../utils/player';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -31,7 +32,8 @@ export default function Home() {
 
   useEffect(() => {
     const unsub1 = on('room:created', (data: { roomId: string }) => {
-      navigate(`/room/${data.roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}&creator=1`);
+      savePlayerInfo(playerName, avatar, true);
+      navigate(`/room/${data.roomId}`);
     });
 
     const unsub2 = on('room:error', (data: { message: string }) => {
@@ -45,12 +47,14 @@ export default function Home() {
   const createRoom = () => {
     if (!playerName.trim()) return;
     setIsJoining(true);
+    savePlayerInfo(playerName.trim(), avatar, true);
     emit('room:create', { playerName: playerName.trim(), avatar });
   };
 
   const joinRoom = () => {
     if (!playerName.trim() || !roomCode.trim()) return;
-    navigate(`/room/${roomCode.trim().toUpperCase()}?name=${encodeURIComponent(playerName.trim())}&avatar=${encodeURIComponent(avatar)}`);
+    savePlayerInfo(playerName.trim(), avatar, false);
+    navigate(`/room/${roomCode.trim().toUpperCase()}`);
   };
 
   return (

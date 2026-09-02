@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Copy, Check, Heart, Users, Gamepad2, Sparkles } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
 import { showError } from '../utils/alert';
+import { getPlayerInfo } from '../utils/player';
 
 const GAMES = [
   { id: 'tictactoe', name: 'Jogo da Velha', emoji: '❌⭕', description: 'O classico jogo da velha, mas mais fofo!', color: 'from-rose-400 to-pink-500', bg: 'bg-rose-50', border: 'border-rose-200' },
@@ -16,13 +17,10 @@ const GAMES = [
 
 export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { emit, on } = useSocket();
 
-  const playerName = searchParams.get('name') || 'Jogador';
-  const avatar = searchParams.get('avatar') || '🐱';
-  const isCreator = searchParams.get('creator') === '1';
+  const { name: playerName, avatar, isCreator } = getPlayerInfo();
   const [players, setPlayers] = useState<{ name: string; avatar: string }[]>(isCreator ? [{ name: playerName, avatar }] : []);
   const [copied, setCopied] = useState(false);
   const [waiting, setWaiting] = useState(true);
@@ -35,7 +33,7 @@ export default function Room() {
       setPlayers(data.players);
       if (data.players.length >= 2) setWaiting(false);
       if (data.gameType) {
-        navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
+        navigate(`/game/${data.gameType}/${roomId}`);
       }
     });
 
@@ -51,7 +49,7 @@ export default function Room() {
     });
 
     const unsub4 = on('room:gameSelected', (data: { gameType: string }) => {
-      navigate(`/game/${data.gameType}/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`);
+      navigate(`/game/${data.gameType}/${roomId}`);
     });
 
     const unsub5 = on('room:backToRoom', () => {
@@ -80,8 +78,6 @@ export default function Room() {
   };
 
   const shareRoom = async () => {
-    // FIX: build the invite URL correctly for hash-based routing.
-    // The ?join= param must come AFTER the hash so React Router can read it.
     const baseUrl = window.location.href.split('#')[0];
     const shareUrl = `${baseUrl}#/?join=${roomId}`;
 

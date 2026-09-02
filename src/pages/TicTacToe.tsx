@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, RotateCcw, Trophy, ArrowRight } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
+import { getPlayerInfo } from '../utils/player';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
 
@@ -19,13 +20,12 @@ const WINNING_COMBOS = [
 
 export default function TicTacToe() {
   const { roomId } = useParams<{ roomId: string }>();
-  const [searchParams] = useSearchParams();
+
   const navigate = useNavigate();
   const { emit, on } = useSocket();
   const { playClick, playWin, playDraw } = useSounds();
   
-  const playerName = searchParams.get('name') || 'Jogador';
-  const avatar = searchParams.get('avatar') || '🐱';
+  const { name: playerName, avatar } = getPlayerInfo();
   
   const [board, setBoard] = useState<Board>(Array(9).fill(null));
   const [mySymbol, setMySymbol] = useState<Player | null>(null);
@@ -96,7 +96,7 @@ export default function TicTacToe() {
 
   const resetGame = () => emit('game:reset', { roomId });
 
-  const backToRoom = () => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`); };
+  const backToRoom = () => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`); };
   const leaveRoom = () => navigate('/');
 
   const getCellEmoji = (value: string | null) => {

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, RotateCcw, Heart, ArrowRight } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
+import { getPlayerInfo } from '../utils/player';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
 
@@ -17,13 +18,11 @@ const loveWords = [
 
 export default function Hangman() {
   const { roomId } = useParams<{ roomId: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { emit, on } = useSocket();
   const { playCorrect, playWrong, playWin, playLose, playClick } = useSounds();
   
-  const playerName = searchParams.get('name') || 'Jogador';
-  const avatar = searchParams.get('avatar') || '🐱';
+  const { name: playerName, avatar } = getPlayerInfo();
   
   const [myRole, setMyRole] = useState<'chooser' | 'guesser' | null>(null);
   const [word, setWord] = useState('');
@@ -217,7 +216,7 @@ export default function Hangman() {
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={() => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}?name=${encodeURIComponent(playerName)}&avatar=${encodeURIComponent(avatar)}`); }}
+            onClick={() => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`); }}
             className="flex items-center gap-2 text-love-600 font-bold"
           >
             <ArrowLeft size={20} />
