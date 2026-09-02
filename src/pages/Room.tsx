@@ -28,7 +28,6 @@ export default function Room() {
   const [waiting, setWaiting] = useState(true);
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
-  // Single effect: register listeners AND emit join — simple and robust
   useEffect(() => {
     // 1) Register ALL listeners FIRST
     const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
@@ -59,10 +58,9 @@ export default function Room() {
       emit('room:getState', { roomId, playerName, avatar });
     });
 
-    // 2) Emit room:getState with aggressive retries
-    //    Socket.io buffers events if not connected yet, so emitting immediately is safe
+    // 2) Emit room:getState with retries to handle slow connections
     const joinRoom = () => emit('room:getState', { roomId, playerName, avatar });
-    joinRoom(); // immediate
+    joinRoom();
     const timers = [500, 1000, 2000, 3000, 5000, 8000, 12000].map(
       ms => setTimeout(joinRoom, ms)
     );
@@ -82,7 +80,11 @@ export default function Room() {
   };
 
   const shareRoom = async () => {
-    const shareUrl = `${window.location.origin}${window.location.pathname}#/?join=${roomId}`;
+    // FIX: build the invite URL correctly for hash-based routing.
+    // The ?join= param must come AFTER the hash so React Router can read it.
+    const baseUrl = window.location.href.split('#')[0];
+    const shareUrl = `${baseUrl}#/?join=${roomId}`;
+
     const shareData = {
       title: 'Vem jogar comigo! 💕',
       text: `Entra na sala e coloca seu nome!\n\nCódigo: ${roomId}\n\nOu clique no link:`,
@@ -91,7 +93,9 @@ export default function Room() {
     if (navigator.share) {
       try { await navigator.share(shareData); } catch {}
     } else {
-      copyCode();
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
