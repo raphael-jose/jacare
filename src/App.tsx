@@ -6,7 +6,7 @@ import TicTacToe from './pages/TicTacToe';
 import Hangman from './pages/Hangman';
 import MemoryGame from './pages/MemoryGame';
 import WordGame from './pages/WordGame';
-import Dodgeball from './pages/Dodgeball';
+
 import FloatingHearts from './components/FloatingHearts';
 import BackgroundMusic from './components/BackgroundMusic';
 
@@ -24,7 +24,7 @@ function App() {
             <Route path="/game/hangman/:roomId" element={<Hangman />} />
             <Route path="/game/memory/:roomId" element={<MemoryGame />} />
             <Route path="/game/words/:roomId" element={<WordGame />} />
-            <Route path="/game/dodgeball/:roomId" element={<Dodgeball />} />
+
           </Routes>
         </div>
       </div>
