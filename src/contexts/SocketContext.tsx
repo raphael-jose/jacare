@@ -22,6 +22,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     })
   );
 

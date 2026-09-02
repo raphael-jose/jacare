@@ -13,6 +13,8 @@ const io = new Server(httpServer, {
     origin: '*',
     methods: ['GET', 'POST'],
   },
+  pingTimeout: 30000,
+  pingInterval: 10000,
 });
 
 // Types
@@ -28,6 +30,10 @@ interface Room {
 
 // Game rooms storage
 const rooms = new Map<string, Room>();
+
+// Grace period for disconnections (10 seconds)
+const GRACE_PERIOD_MS = 10000;
+const disconnectedPlayers = new Map<string, { roomId: string; playerName: string; avatar: string; timer: NodeJS.Timeout }>();
 
 function generateRoomCode(): string {
   return randomBytes(3).toString('hex').toUpperCase();
@@ -180,6 +186,24 @@ io.on('connection', (socket: Socket) => {
     socket.join(roomId);
     socket.data = { roomId, playerName };
 
+    // Check grace period first — reconnecting player
+    const disconnectKey = `${roomId}:${playerName}`;
+    const graceEntry = disconnectedPlayers.get(disconnectKey);
+    if (graceEntry) {
+      clearTimeout(graceEntry.timer);
+      disconnectedPlayers.delete(disconnectKey);
+      // Update existing player entry with new socket.id
+      const idx = room.players.findIndex(p => p.name === playerName);
+      if (idx >= 0) {
+        room.players[idx].id = socket.id;
+        room.players[idx].avatar = avatar || room.players[idx].avatar;
+      }
+      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+      socket.emit('room:joined', { roomId, players: playersData });
+      console.log(`🔄 ${playerName} reconectou na sala ${roomId}`);
+      return;
+    }
+
     const existingIdx = room.players.findIndex(p => p.id === socket.id);
     if (existingIdx >= 0) {
       room.players[existingIdx].name = playerName;
@@ -189,14 +213,13 @@ io.on('connection', (socket: Socket) => {
       return;
     }
 
-    // Check by name for reconnection (socket reconnected with new ID)
+    // Check by name for reconnection
     const nameIdx = room.players.findIndex(p => p.name === playerName);
     if (nameIdx >= 0) {
       room.players[nameIdx].id = socket.id;
       room.players[nameIdx].avatar = avatar || room.players[nameIdx].avatar;
       const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
       socket.emit('room:joined', { roomId, players: playersData });
-      socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName });
       return;
     }
 
@@ -225,26 +248,35 @@ io.on('connection', (socket: Socket) => {
     socket.join(roomId);
     socket.data = { roomId, playerName: playerName || '' };
 
-    // Handle player joining via getState (for invite link flow)
     const pName = playerName || '';
     const pAvatar = avatar || '🐱';
     let didJoin = false;
 
+    // Check grace period first
+    const disconnectKey = `${roomId}:${pName}`;
+    const graceEntry = disconnectedPlayers.get(disconnectKey);
+    if (graceEntry) {
+      clearTimeout(graceEntry.timer);
+      disconnectedPlayers.delete(disconnectKey);
+      const idx = room.players.findIndex(p => p.name === pName);
+      if (idx >= 0) {
+        room.players[idx].id = socket.id;
+        room.players[idx].avatar = pAvatar;
+      }
+      console.log(`🔄 ${pName} reconectou via getState`);
+    }
+
     // Check if this socket is already in the room
     const existingIdx = room.players.findIndex(p => p.id === socket.id);
     if (existingIdx >= 0) {
-      // Update existing player info
       if (pName) room.players[existingIdx].name = pName;
       if (avatar) room.players[existingIdx].avatar = pAvatar;
     } else {
-      // Check by name for reconnection
       const nameIdx = room.players.findIndex(p => p.name === pName);
       if (nameIdx >= 0) {
         room.players[nameIdx].id = socket.id;
         room.players[nameIdx].avatar = pAvatar;
-        didJoin = true;
       } else if (pName && room.players.length < room.maxPlayers) {
-        // New player - add to room
         room.players.push({ id: socket.id, name: pName, avatar: pAvatar });
         didJoin = true;
       }
@@ -253,7 +285,6 @@ io.on('connection', (socket: Socket) => {
     const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
     socket.emit('room:state', { players: playersData, gameType: room.gameType });
 
-    // Notify others if a new player joined
     if (didJoin) {
       socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName: pName });
     }
@@ -558,16 +589,41 @@ io.on('connection', (socket: Socket) => {
     for (const [roomId, room] of rooms.entries()) {
       const playerIndex = room.players.findIndex((p: any) => p.id === socket.id);
       if (playerIndex !== -1) {
-        const playerName = room.players[playerIndex].name;
-        room.players.splice(playerIndex, 1);
-        // Clear all game intervals
-        if (room.state.snakeInterval) { clearInterval(room.state.snakeInterval); room.state.snakeInterval = null; }
-        if (room.state.runnerInterval) { clearInterval(room.state.runnerInterval); room.state.runnerInterval = null; }
-        if (room.state.dodgeballInterval) { clearInterval(room.state.dodgeballInterval); room.state.dodgeballInterval = null; }
-        if (room.state.kitchenInterval) { clearInterval(room.state.kitchenInterval); room.state.kitchenInterval = null; }
-        if (room.state.kitchenMoveInterval) { clearInterval(room.state.kitchenMoveInterval); room.state.kitchenMoveInterval = null; }
-        io.to(roomId).emit('game:playerLeft', { playerName });
-        if (room.players.length === 0) rooms.delete(roomId);
+        const player = room.players[playerIndex];
+        const playerName = player.name;
+
+        // Don't remove immediately — start a grace period for reconnection
+        const disconnectKey = `${roomId}:${playerName}`;
+
+        // Cancel any existing grace period for this player
+        const existing = disconnectedPlayers.get(disconnectKey);
+        if (existing) clearTimeout(existing.timer);
+
+        const timer = setTimeout(() => {
+          // Grace period expired — actually remove the player
+          disconnectedPlayers.delete(disconnectKey);
+          const currentRoom = rooms.get(roomId);
+          if (!currentRoom) return;
+          const idx = currentRoom.players.findIndex((p: any) => p.name === playerName);
+          if (idx !== -1) {
+            currentRoom.players.splice(idx, 1);
+            // Clear game intervals
+            if (currentRoom.state.snakeInterval) { clearInterval(currentRoom.state.snakeInterval); currentRoom.state.snakeInterval = null; }
+            if (currentRoom.state.runnerInterval) { clearInterval(currentRoom.state.runnerInterval); currentRoom.state.runnerInterval = null; }
+            if (currentRoom.state.dodgeballInterval) { clearInterval(currentRoom.state.dodgeballInterval); currentRoom.state.dodgeballInterval = null; }
+            io.to(roomId).emit('game:playerLeft', { playerName });
+            if (currentRoom.players.length === 0) rooms.delete(roomId);
+          }
+        }, GRACE_PERIOD_MS);
+
+        disconnectedPlayers.set(disconnectKey, {
+          roomId,
+          playerName,
+          avatar: player.avatar,
+          timer,
+        });
+
+        console.log(`⏳ ${playerName} em periodo de grace (${GRACE_PERIOD_MS / 1000}s)`);
       }
     }
   });
