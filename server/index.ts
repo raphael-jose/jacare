@@ -150,7 +150,7 @@ io.on('connection', (socket: Socket) => {
     const room: Room = {
       id: roomId,
       gameType: null,
-      players: [{ id: socket.id, name: playerName, avatar: avatar || '🐱' }],
+      players: [],
       state: {},
       maxPlayers: 2,
       messages: [],
@@ -161,7 +161,10 @@ io.on('connection', (socket: Socket) => {
     socket.join(roomId);
     socket.data = { roomId, playerName };
 
-    socket.emit('room:created', { roomId, players: [{ name: playerName, avatar: avatar || '🐱' }] });
+    // Now immediately join via room:join logic
+    room.players.push({ id: socket.id, name: playerName, avatar: avatar || '🐱' });
+    const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+    socket.emit('room:created', { roomId, players: playersData });
     console.log(`🏠 Sala ${roomId} criada por ${playerName}`);
   });
 
@@ -183,6 +186,17 @@ io.on('connection', (socket: Socket) => {
       room.players[existingIdx].avatar = avatar || room.players[existingIdx].avatar;
       const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
       socket.emit('room:joined', { roomId, players: playersData });
+      return;
+    }
+
+    // Check by name for reconnection (socket reconnected with new ID)
+    const nameIdx = room.players.findIndex(p => p.name === playerName);
+    if (nameIdx >= 0) {
+      room.players[nameIdx].id = socket.id;
+      room.players[nameIdx].avatar = avatar || room.players[nameIdx].avatar;
+      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+      socket.emit('room:joined', { roomId, players: playersData });
+      socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName });
       return;
     }
 
@@ -209,18 +223,9 @@ io.on('connection', (socket: Socket) => {
       return;
     }
     socket.join(roomId);
-    const existingIdx = room.players.findIndex(p => p.id === socket.id);
-    if (existingIdx === -1 && playerName && room.players.length < room.maxPlayers) {
-      room.players.push({ id: socket.id, name: playerName, avatar: avatar || '🐱' });
-      socket.data = { roomId, playerName };
-      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-      socket.emit('room:joined', { roomId, players: playersData });
-      socket.to(roomId).emit('room:playerJoined', { players: playersData, playerName });
-    } else {
-      socket.data = { roomId, playerName: room.players.find(p => p.id === socket.id)?.name || playerName || '' };
-      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-      socket.emit('room:state', { players: playersData, gameType: room.gameType });
-    }
+    socket.data = { roomId, playerName: room.players.find(p => p.id === socket.id)?.name || playerName || '' };
+    const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+    socket.emit('room:state', { players: playersData, gameType: room.gameType });
   });
 
   // ===== GAME SELECTION =====
