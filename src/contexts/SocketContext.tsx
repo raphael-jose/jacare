@@ -17,35 +17,38 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | null>(null);
 
 export function SocketProvider({ children }: { children: ReactNode }) {
-  // Create socket SYNCHRONOUSLY so children's effects can use it immediately
-  const socketRef = useRef<Socket>(
-    io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-    })
-  );
-
-  const [connected, setConnected] = useState(socketRef.current.connected);
+  const socketRef = useRef<Socket | null>(null);
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const socket = socketRef.current;
+    console.log('[Socket] Connecting to', SOCKET_URL);
+    const socket = io(SOCKET_URL, {
+      transports: ['polling', 'websocket'],  // polling FIRST — more reliable for cold starts
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,       // never give up
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,                        // 20s per attempt
+    });
 
-    const onConnect = () => setConnected(true);
-    const onDisconnect = () => setConnected(false);
+    socketRef.current = socket;
 
-    socket.on('connect', onConnect);
-    socket.on('disconnect', onDisconnect);
+    socket.on('connect', () => {
+      console.log('[Socket] Connected!', socket.id);
+      setConnected(true);
+    });
 
-    // Set initial state if already connected
-    if (socket.connected) setConnected(true);
+    socket.on('disconnect', (reason) => {
+      console.log('[Socket] Disconnected:', reason);
+      setConnected(false);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.log('[Socket] Connection error:', err.message);
+    });
 
     return () => {
-      socket.off('connect', onConnect);
-      socket.off('disconnect', onDisconnect);
       socket.disconnect();
     };
   }, []);
