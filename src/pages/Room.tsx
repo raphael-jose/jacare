@@ -37,12 +37,6 @@ export default function Room() {
       }
     });
 
-    const unsub1b = on('room:joined', (data: { roomId: string; players: { name: string; avatar: string }[] }) => {
-      console.log('[Room] room:joined received', data.players?.length, 'players');
-      setPlayers(data.players);
-      if (data.players.length >= 2) setWaiting(false);
-    });
-
     const unsub2 = on('room:playerJoined', (data: { players: { name: string; avatar: string }[]; playerName: string }) => {
       console.log('[Room] room:playerJoined received', data.playerName);
       setPlayers(data.players);
@@ -62,11 +56,8 @@ export default function Room() {
       emit('room:getState', { roomId, playerName, avatar });
     });
 
-    // 2) Emit BOTH room:join AND room:getState — one of them will add the player
-    const joinRoom = () => {
-      emit('room:join', { roomId, playerName, avatar });
-      emit('room:getState', { roomId, playerName, avatar });
-    };
+    // 2) Emit room:getState — it handles both reading state AND joining
+    const joinRoom = () => emit('room:getState', { roomId, playerName, avatar });
     joinRoom();
     const timers = [500, 1000, 2000, 3000, 5000].map(
       ms => setTimeout(joinRoom, ms)
@@ -75,7 +66,7 @@ export default function Room() {
     console.log('[Room] Mounted, registering listeners and joining room', roomId, 'as', playerName);
 
     return () => {
-      unsub0(); unsub1b(); unsub2(); unsub3(); unsub4(); unsub5();
+      unsub0(); unsub2(); unsub3(); unsub4(); unsub5();
       timers.forEach(clearTimeout);
     };
   }, [roomId, playerName, avatar, emit, on, navigate]);
