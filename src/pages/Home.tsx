@@ -30,6 +30,14 @@ export default function Home() {
   const [roomCode, setRoomCode] = useState(joinCode);
   const [isJoining, setIsJoining] = useState(false);
 
+  // BUGFIX: when the invite link arrives in the SAME session (hash changes
+  // without a page reload), roomCode keeps its stale mount-time value (''),
+  // so the invite card showed an empty code and "Entrar na Sala" silently did
+  // nothing. Keep it in sync whenever the ?join param appears/changes.
+  useEffect(() => {
+    setRoomCode(joinCode);
+  }, [joinCode]);
+
   useEffect(() => {
     const unsub1 = on('room:created', (data: { roomId: string }) => {
       savePlayerInfo(playerName, avatar, true);
