@@ -15,6 +15,8 @@ const io = new Server(httpServer, {
   },
   pingTimeout: 30000,
   pingInterval: 10000,
+  // Allow audio messages and photos through the socket (default is 1MB)
+  maxHttpBufferSize: 12 * 1024 * 1024,
 });
 
 // Types
@@ -24,7 +26,7 @@ interface Room {
   players: { id: string; name: string; avatar: string }[];
   state: any;
   maxPlayers: number;
-  messages: { id: string; sender: string; text: string; time: number }[];
+  messages: ChatMessage[];
   scoreboard: { [playerName: string]: { tictactoe: number; hangman: number; memory: number; words: number; termo: number; snake: number; runner: number; dodgeball: number; kitchen: number; total: number } };
 }
 
@@ -78,7 +80,9 @@ interface ChatMessage {
   id: string;
   sender: string;
   avatar: string;
-  text: string;
+  kind: 'text' | 'audio' | 'image' | 'gif';
+  text?: string;
+  data?: string; // base64 for audio/image, URL for gif
   time: number;
 }
 
@@ -347,16 +351,37 @@ io.on('connection', (socket: Socket) => {
 
   // ===== CHAT =====
 
-  socket.on('chat:message', ({ roomId, text }: { roomId: string; text: string }) => {
+  socket.on('chat:message', ({ roomId, kind, text, data }: { roomId: string; kind?: string; text?: string; data?: string }) => {
     const room = rooms.get(roomId);
     if (!room) return;
+
+    const k = (kind === 'audio' || kind === 'image' || kind === 'gif') ? kind : 'text';
+
+    let payload: string | undefined;
+    if (k === 'text') {
+      const t = (text || '').trim().slice(0, 500);
+      if (!t) return;
+      payload = t;
+    } else if (k === 'gif') {
+      const u = (data || '').trim();
+      if (!u.startsWith('http')) return;
+      payload = u.slice(0, 600);
+    } else {
+      // audio/image arrive as base64 data URLs — cap the size so a single
+      // message can't blow up the room history
+      const d = (data || '').trim();
+      if (!d.startsWith('data:') || d.length > 8 * 1024 * 1024) return;
+      payload = d;
+    }
 
     const player = room.players.find(p => p.id === socket.id);
     const msg: ChatMessage = {
       id: randomBytes(4).toString('hex'),
       sender: socket.data.playerName || 'Anonimo',
       avatar: player?.avatar || '🐱',
-      text: text.slice(0, 200),
+      kind: k,
+      text: k === 'text' ? payload : undefined,
+      data: k === 'text' ? undefined : payload,
       time: Date.now(),
     };
 

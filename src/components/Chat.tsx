@@ -1,15 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Send, X } from 'lucide-react';
+import { MessageCircle, Send, X, Smile, Mic, Square, Image as ImageIcon, Film } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import AvatarBadge from './AvatarBadge';
+import { showError } from '../utils/alert';
 
 interface Message {
   id: string;
   sender: string;
   avatar: string;
-  text: string;
+  kind: 'text' | 'audio' | 'image' | 'gif';
+  text?: string;
+  data?: string;
   time: number;
 }
 
@@ -17,6 +20,18 @@ interface ChatProps {
   roomId: string;
   playerName: string;
 }
+
+const EMOJIS = [
+  '😍', '🥰', '😘', '💋', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
+  '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '♥️', '💌', '🌹', '💐',
+  '😊', '😉', '🥺', '😅', '😂', '🤭', '😳', '🤗', '😎', '😴', '🥳', '🤩',
+  '😇', '🙈', '🙉', '🐱', '🐶', '🦋', '🌸', '✨', '⭐', '🌙', '☀️', '🍓',
+  '🍫', '🍕', '☕', '🎁', '🎉', '🎊', '🏆', '👑', '💍', '💎', '🚀', '🔥',
+  '👀', '💪', '🤝', '🫶', '👫', '💏', '💑', '😴', '😝', '😤', '😭', '😡',
+];
+
+// Giphy public beta key (override with VITE_GIPHY_KEY for production use)
+const GIPHY_KEY = import.meta.env.VITE_GIPHY_KEY || 'dc6zaTOxFJmzC';
 
 export default function Chat({ roomId, playerName }: ChatProps) {
   const { emit, on } = useSocket();
@@ -27,25 +42,38 @@ export default function Chat({ roomId, playerName }: ChatProps) {
   const [unread, setUnread] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // --- emoji / gif panels ---
+  const [showEmojis, setShowEmojis] = useState(false);
+  const [showGifs, setShowGifs] = useState(false);
+  const [gifQuery, setGifQuery] = useState('');
+  const [gifResults, setGifResults] = useState<{ url: string; preview: string }[]>([]);
+  const [gifLoading, setGifLoading] = useState(false);
+  const [gifError, setGifError] = useState(false);
+
+  // --- voice recording ---
+  const [recording, setRecording] = useState(false);
+  const [recTime, setRecTime] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recChunksRef = useRef<Blob[]>([]);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    // Request chat history
     emit('chat:getHistory', { roomId });
 
     const unsub1 = on('chat:message', (msg: Message) => {
       setMessages(prev => [...prev, msg]);
       if (msg.sender !== playerName) playMessage();
-      if (!isOpen) {
-        setUnread(prev => prev + 1);
-      }
+      if (!isOpen) setUnread(prev => prev + 1);
     });
 
     const unsub2 = on('chat:history', (data: { messages: Message[] }) => {
-      setMessages(data.messages);
+      setMessages((data.messages || []).map(m => ({ ...m, kind: m.kind || 'text' })));
     });
 
     return () => { unsub1(); unsub2(); };
-  }, [roomId, emit, on, isOpen]);
+  }, [roomId, emit, on, isOpen, playerName, playMessage]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,18 +83,173 @@ export default function Chat({ roomId, playerName }: ChatProps) {
     if (isOpen) {
       setUnread(0);
       setTimeout(() => inputRef.current?.focus(), 100);
+    } else {
+      setShowEmojis(false);
+      setShowGifs(false);
     }
   }, [isOpen]);
 
+  useEffect(() => () => { stopRecording(); }, []);
+
   const sendMessage = () => {
     if (!input.trim()) return;
-    emit('chat:message', { roomId, text: input.trim() });
+    emit('chat:message', { roomId, kind: 'text', text: input.trim() });
     setInput('');
+    setShowEmojis(false);
+  };
+
+  const sendMedia = (kind: 'image' | 'gif' | 'audio', data: string) => {
+    emit('chat:message', { roomId, kind, data });
+    setShowGifs(false);
+    setGifQuery('');
+    setGifResults([]);
+  };
+
+  // --- emoji picker ---
+  const addEmoji = (e: string) => {
+    setInput(prev => prev + e);
+    inputRef.current?.focus();
+  };
+
+  // --- image upload (compress before sending) ---
+  const onImagePicked = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1280;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          const scale = MAX / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { sendMedia('image', reader.result as string); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        if (dataUrl.length > 8 * 1024 * 1024) {
+          showError('Imagem grande demais! Envie uma foto menor.');
+          return;
+        }
+        sendMedia('image', dataUrl);
+      };
+      img.onerror = () => sendMedia('image', reader.result as string);
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // --- giphy search ---
+  const searchGifs = async (q: string) => {
+    const query = q.trim();
+    if (!query) return;
+    setGifLoading(true);
+    setGifError(false);
+    try {
+      const res = await fetch(
+        `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(GIPHY_KEY)}&q=${encodeURIComponent(query)}&limit=12&rating=g`
+      );
+      if (!res.ok) throw new Error('giphy error');
+      const json = await res.json();
+      const items = (json.data || []).map((g: any) => ({
+        url: g.images?.original?.url || g.images?.fixed_height?.url || '',
+        preview: g.images?.fixed_height?.url || g.images?.preview_gif?.url || '',
+      })).filter((i: any) => i.url);
+      setGifResults(items);
+      if (items.length === 0) setGifError(true);
+    } catch {
+      setGifError(true);
+    } finally {
+      setGifLoading(false);
+    }
+  };
+
+  // --- voice recording ---
+  const startRecording = async () => {
+    if (recording) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find(m => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) || '';
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      recChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) recChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const type = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(recChunksRef.current, { type });
+        const reader = new FileReader();
+        reader.onload = () => sendMedia('audio', reader.result as string);
+        reader.readAsDataURL(blob);
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+      setRecTime(0);
+      recTimerRef.current = setInterval(() => {
+        setRecTime(t => {
+          if (t >= 59) { stopRecording(); return 0; }
+          return t + 1;
+        });
+      }, 1000);
+      playClick();
+    } catch {
+      showError('Não consegui acessar o microfone. Verifique a permissão do navegador!');
+    }
+  };
+
+  const stopRecording = () => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop();
+    }
+    recorderRef.current = null;
+    if (recTimerRef.current) clearInterval(recTimerRef.current);
+    recTimerRef.current = null;
+    setRecording(false);
+    setRecTime(0);
   };
 
   const formatTime = (timestamp: number) => {
     const d = new Date(timestamp);
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  const renderBubble = (msg: Message) => {
+    const mine = msg.sender === playerName;
+    const bubbleClass = mine
+      ? 'bg-love-500 text-white rounded-br-md'
+      : 'bg-love-50 text-love-700 border border-love-100 rounded-bl-md';
+
+    let content: ReactNode;
+    if (msg.kind === 'image' || msg.kind === 'gif') {
+      content = (
+        <img
+          src={msg.data}
+          alt="mídia"
+          className="max-w-[220px] max-h-64 rounded-2xl object-cover"
+          loading="lazy"
+        />
+      );
+    } else if (msg.kind === 'audio') {
+      content = (
+        <audio controls preload="none" className="w-52 h-10" src={msg.data}>
+          Seu navegador não suporta áudio
+        </audio>
+      );
+    } else {
+      content = <p className="break-words whitespace-pre-wrap">{msg.text}</p>;
+    }
+
+    return (
+      <div className={`max-w-[230px] px-3 py-2 rounded-2xl text-sm font-medium ${bubbleClass}`}>
+        {content}
+      </div>
+    );
   };
 
   return (
@@ -106,7 +289,7 @@ export default function Chat({ roomId, playerName }: ChatProps) {
               <h3 className="font-bold text-sm flex items-center gap-1.5">
                 <MessageCircle size={15} /> Chat da Sala
               </h3>
-              <p className="text-love-100 text-xs">Mensagens em tempo real</p>
+              <p className="text-love-100 text-xs">Emojis, voz, fotos e GIFs 💌</p>
             </div>
 
             {/* Messages */}
@@ -130,47 +313,166 @@ export default function Chat({ roomId, playerName }: ChatProps) {
                     <span className="text-xs text-love-400 mb-0.5 px-1">
                       {msg.sender} • {formatTime(msg.time)}
                     </span>
-                    <div
-                      className={`max-w-[200px] px-3 py-2 rounded-2xl text-sm font-medium ${
-                        msg.sender === playerName
-                          ? 'bg-love-500 text-white rounded-br-md'
-                          : 'bg-love-50 text-love-700 border border-love-100 rounded-bl-md'
-                      }`}
-                    >
-                      {msg.text}
-                    </div>
+                    {renderBubble(msg)}
                   </div>
                 </motion.div>
               ))}
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Emoji picker */}
+            <AnimatePresence>
+              {showEmojis && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="border-t border-love-100 overflow-y-auto max-h-36 bg-love-50/60"
+                >
+                  <div className="grid grid-cols-8 gap-1 p-2">
+                    {EMOJIS.map((e) => (
+                      <button
+                        key={e}
+                        onClick={() => addEmoji(e)}
+                        className="text-xl hover:scale-125 transition-transform"
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* GIF picker */}
+            <AnimatePresence>
+              {showGifs && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="border-t border-love-100 bg-white"
+                >
+                  <div className="flex gap-2 p-2">
+                    <input
+                      value={gifQuery}
+                      onChange={(e) => setGifQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && searchGifs(gifQuery)}
+                      placeholder="Buscar GIF (ex: beijo, amor)"
+                      className="flex-1 px-3 py-1.5 rounded-full bg-love-50 border border-love-200 text-sm focus:outline-none focus:border-love-400 text-love-700 placeholder-love-300"
+                      maxLength={60}
+                    />
+                    <button
+                      onClick={() => searchGifs(gifQuery)}
+                      disabled={gifLoading || !gifQuery.trim()}
+                      className="px-3 py-1 rounded-full bg-love-500 text-white text-xs font-bold disabled:opacity-40"
+                    >
+                      Buscar
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 p-2 overflow-y-auto max-h-40">
+                    {gifLoading && (
+                      <div className="col-span-3 text-center text-love-400 text-xs py-4">Buscando GIFs...</div>
+                    )}
+                    {gifError && !gifLoading && (
+                      <div className="col-span-3 text-center text-love-400 text-xs py-4">
+                        Nenhum GIF encontrado. Tente outra busca!
+                      </div>
+                    )}
+                    {gifResults.map((g, i) => (
+                      <img
+                        key={i}
+                        src={g.preview}
+                        alt="gif"
+                        loading="lazy"
+                        onClick={() => sendMedia('gif', g.url)}
+                        className="w-full h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 border border-love-100"
+                      />
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Input */}
             <div className="p-3 border-t border-love-100">
-              <div className="flex gap-2">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                  placeholder="Digite sua mensagem..."
-                  className="flex-1 px-3 py-2 rounded-full bg-love-50 border border-love-200 
-                           text-sm focus:outline-none focus:border-love-400 text-love-700 placeholder-love-300"
-                  maxLength={200}
-                />
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={sendMessage}
-                  disabled={!input.trim()}
-                  className="w-9 h-9 rounded-full bg-love-500 text-white flex items-center justify-center 
-                           disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Send size={16} />
-                </motion.button>
-              </div>
+              {recording ? (
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-2xl bg-red-50 border border-red-200">
+                  <span className="text-red-500 font-bold text-sm animate-pulse flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                    Gravando... {String(Math.floor(recTime / 60)).padStart(2, '0')}:{String(recTime % 60).padStart(2, '0')}
+                  </span>
+                  <button onClick={stopRecording} className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center">
+                    <Square size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-1.5 items-center">
+                  <button
+                    onClick={() => { setShowGifs(false); setShowEmojis(!showEmojis); }}
+                    title="Emojis"
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${showEmojis ? 'bg-love-500 text-white' : 'bg-love-50 text-love-600'}`}
+                  >
+                    <Smile size={16} />
+                  </button>
+                  <button
+                    onClick={() => { setShowEmojis(false); setShowGifs(!showGifs); }}
+                    title="GIFs"
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${showGifs ? 'bg-love-500 text-white' : 'bg-love-50 text-love-600'}`}
+                  >
+                    <Film size={16} />
+                  </button>
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    title="Enviar foto"
+                    className="w-8 h-8 rounded-full bg-love-50 text-love-600 flex items-center justify-center"
+                  >
+                    <ImageIcon size={16} />
+                  </button>
+                  <button
+                    onClick={startRecording}
+                    title="Mensagem de voz"
+                    className="w-8 h-8 rounded-full bg-love-50 text-love-600 flex items-center justify-center"
+                  >
+                    <Mic size={16} />
+                  </button>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder="Digite sua mensagem..."
+                    className="flex-1 min-w-0 px-3 py-2 rounded-full bg-love-50 border border-love-200 
+                             text-sm focus:outline-none focus:border-love-400 text-love-700 placeholder-love-300"
+                    maxLength={500}
+                  />
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={sendMessage}
+                    disabled={!input.trim()}
+                    className="w-9 h-9 rounded-full bg-love-500 text-white flex items-center justify-center 
+                             disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    <Send size={16} />
+                  </motion.button>
+                </div>
+              )}
             </div>
+
+            {/* Hidden file input */}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onImagePicked(f);
+                e.target.value = '';
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
