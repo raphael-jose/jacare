@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, RotateCcw, Trophy, ArrowRight } from 'lucide-react';
+import { ArrowLeft, RotateCcw, LogOut, Grid3x3, Trophy } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -67,10 +67,13 @@ export default function TicTacToe() {
     });
     const unsub7 = on('game:playerLeft', (data: { playerName: string }) => {
       showError(`${data.playerName} saiu do jogo`);
-      navigate('/');
+      navigate(`/room/${roomId}`);
+    });
+    const unsub8 = on('room:backToRoom', () => {
+      navigate(`/room/${roomId}`);
     });
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); };
   }, [roomId, playerName, emit, on, navigate]);
 
   const checkWinner = useCallback((b: Board): { winner: string | null; line: number[] } => {
@@ -99,10 +102,8 @@ export default function TicTacToe() {
   const backToRoom = () => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`); };
   const leaveRoom = () => navigate('/');
 
-  const getCellEmoji = (value: string | null) => {
-    if (value === 'X') return '💕';
-    if (value === 'O') return '💗';
-    return '';
+  const getCellMark = (value: string | null) => {
+    return value || '';
   };
 
   return (
@@ -113,15 +114,18 @@ export default function TicTacToe() {
           <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={backToRoom} className="flex items-center gap-2 text-love-600 font-bold">
             <ArrowLeft size={20} /> Trocar Jogo
           </motion.button>
-          <h1 className="text-xl font-black text-love-700">Jogo da Velha 💕</h1>
+          <h1 className="pixel-font text-sm font-black text-love-700 flex items-center gap-2">
+            <Grid3x3 size={18} className="text-love-500" />
+            JOGO DA VELHA
+          </h1>
           <div className="flex gap-2">
             {winner && (
               <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={resetGame} className="p-2 rounded-full bg-love-100 text-love-600">
                 <RotateCcw size={20} />
               </motion.button>
             )}
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={leaveRoom} className="text-red-400 font-bold text-xs">
-              🚪 Sair
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={leaveRoom} className="text-red-400 font-bold text-xs flex items-center gap-1">
+              <LogOut size={14} /> Sair
             </motion.button>
           </div>
         </div>
@@ -129,7 +133,7 @@ export default function TicTacToe() {
         {/* Players */}
         <div className="flex justify-between items-center mb-6">
           <div className={`text-center p-3 rounded-2xl flex-1 mr-2 ${mySymbol === 'X' ? 'bg-love-100 border-2 border-love-400' : 'bg-white/50 border-2 border-transparent'}`}>
-            <span className="text-2xl">💕</span>
+            <span className="text-2xl font-black text-love-500">X</span>
             <p className="font-bold text-love-700 text-sm truncate">{players.X || 'Esperando...'}</p>
             <p className="text-love-500 text-xs">{scores.X} vitorias</p>
           </div>
@@ -182,7 +186,7 @@ export default function TicTacToe() {
               >
                 {cell && (
                   <motion.span initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 15 }}>
-                    {getCellEmoji(cell)}
+                    {getCellMark(cell)}
                   </motion.span>
                 )}
               </motion.button>

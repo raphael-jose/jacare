@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Copy, Check, Heart, Users, Gamepad2, Sparkles } from 'lucide-react';
+import { Copy, Check, Heart, Users, Gamepad2, Sparkles, Crown, LogOut, Share2, Music, Clock, Grid3x3, Target, Brain, Search, Keyboard, ChevronRight, X } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { useSocket } from '../contexts/SocketContext';
 import Chat from '../components/Chat';
 import Scoreboard from '../components/Scoreboard';
@@ -9,10 +10,11 @@ import { showError } from '../utils/alert';
 import { getPlayerInfo } from '../utils/player';
 
 const GAMES = [
-  { id: 'tictactoe', name: 'Jogo da Velha', emoji: '❌⭕', description: 'O classico jogo da velha, mas mais fofo!', color: 'from-rose-400 to-pink-500', bg: 'bg-rose-50', border: 'border-rose-200' },
-  { id: 'hangman', name: 'Jogo da Forca', emoji: '🎯', description: 'Adivinhe a palavra do amor!', color: 'from-fuchsia-400 to-purple-500', bg: 'bg-fuchsia-50', border: 'border-fuchsia-200' },
-  { id: 'memory', name: 'Jogo da Memoria', emoji: '🧠', description: 'Teste sua memoria com cartas fofas!', color: 'from-amber-400 to-orange-500', bg: 'bg-amber-50', border: 'border-amber-200' },
-  { id: 'words', name: 'Jogo de Palavras', emoji: '✍️', description: 'Quem escreve mais rapido?', color: 'from-cyan-400 to-blue-500', bg: 'bg-cyan-50', border: 'border-cyan-200' },
+  { id: 'tictactoe', name: 'Jogo da Velha', icon: Grid3x3, description: 'O clássico jogo da velha, mais fofo!', color: 'from-rose-400 to-pink-500', bg: 'bg-rose-50', border: 'border-rose-200' },
+  { id: 'hangman', name: 'Jogo da Forca', icon: Target, description: 'Adivinhe a palavra do amor!', color: 'from-fuchsia-400 to-purple-500', bg: 'bg-fuchsia-50', border: 'border-fuchsia-200' },
+  { id: 'memory', name: 'Jogo da Memória', icon: Brain, description: 'Teste sua memória com cartas fofas!', color: 'from-amber-400 to-orange-500', bg: 'bg-amber-50', border: 'border-amber-200' },
+  { id: 'words', name: 'Caça-Palavras', icon: Search, description: 'Encontre as palavras escondidas, por turnos!', color: 'from-cyan-400 to-blue-500', bg: 'bg-cyan-50', border: 'border-cyan-200' },
+  { id: 'termo', name: 'Termo', icon: Keyboard, description: 'Adivinhe a palavra secreta em 6 tentativas!', color: 'from-emerald-400 to-green-500', bg: 'bg-emerald-50', border: 'border-emerald-200' },
 ];
 
 export default function Room() {
@@ -101,9 +103,11 @@ export default function Room() {
   }, [connected, roomId, playerName, avatar, emit]);
 
   const copyCode = async () => {
-    await navigator.clipboard.writeText(roomId || '');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(roomId || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
   };
 
   const shareRoom = async () => {
@@ -115,18 +119,41 @@ export default function Room() {
       text: `Entra na sala e coloca seu nome!\n\nCódigo: ${roomId}\n\nOu clique no link:`,
       url: shareUrl,
     };
+
+    // 1) Try native share (works on phones)
     if (navigator.share) {
-      try { await navigator.share(shareData); } catch {}
-    } else {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch {}
     }
+
+    // 2) Fallback: copy link + show modal with it (works everywhere)
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch {}
+
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+
+    await Swal.fire({
+      title: 'Link do convite 💕',
+      html: `<p style="margin-bottom:12px;font-size:14px;color:#9f1239">Envie para seu amor:</p>
+             <div style="user-select:all;word-break:break-all;background:#fff1f2;border:2px solid #fecdd3;border-radius:12px;padding:12px;font-size:14px;color:#881337;font-weight:700">${shareUrl}</div>
+             <p style="margin-top:12px;font-size:13px;color:#fda4af">Link copiado! É só colar no WhatsApp 💬</p>`,
+      confirmButtonText: 'Ok',
+      confirmButtonColor: '#f43f5e',
+    });
   };
 
   const selectGame = (gameId: string) => {
+    if (!isCreator) return; // only the host can choose
     setSelectedGame(gameId);
     emit('room:selectGame', { roomId, gameType: gameId });
+  };
+
+  const leaveRoom = () => {
+    navigate('/');
   };
 
   return (
@@ -136,16 +163,23 @@ export default function Room() {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-lg"
       >
-        {/* Back + Leave buttons */}
+        {/* Leave button */}
         <div className="flex items-center justify-between mb-6">
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={() => navigate('/')}
+            onClick={leaveRoom}
             className="flex items-center gap-2 text-red-400 font-bold text-sm"
           >
-            🚪 Sair da Sala
+            <LogOut size={16} />
+            Sair da Sala
           </motion.button>
+          {isCreator && (
+            <span className="flex items-center gap-1 text-love-500 text-xs font-bold">
+              <Crown size={14} />
+              Você é o criador
+            </span>
+          )}
         </div>
 
         {/* Room header */}
@@ -155,20 +189,20 @@ export default function Room() {
           className="text-center mb-6"
         >
           <motion.div
-            animate={{ rotate: [0, -5, 5, 0] }}
+            animate={waiting ? { y: [0, -8, 0] } : { rotate: [0, -5, 5, 0] }}
             transition={{ duration: 2, repeat: Infinity }}
-            className="text-5xl mb-3"
+            className="text-5xl mb-3 flex items-center justify-center"
           >
-            {waiting ? '⏳' : '💕'}
+            {waiting ? <Clock className="text-love-400" size={48} /> : <Heart className="text-love-500" size={48} fill="currentColor" />}
           </motion.div>
-          <h1 className="text-3xl font-black text-love-700 mb-1">Sala de Jogos</h1>
+          <h1 className="pixel-font text-3xl font-black text-love-700 mb-1">SALA DE JOGOS</h1>
           <p className="text-love-500 font-medium">
             {waiting ? 'Esperando seu parceiro...' : 'Escolham um jogo para jogar!'}
           </p>
         </motion.div>
 
         {/* Room code card */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-5 shadow-xl shadow-love-200/30 border-2 border-love-100 mb-4">
+        <div className="pixel-border bg-white/80 backdrop-blur-sm rounded-3xl p-5 shadow-xl shadow-love-200/30 border-2 border-love-100 mb-4">
           <p className="text-sm text-love-500 font-bold mb-2 text-center">Codigo da sala:</p>
           <div className="bg-gradient-to-r from-love-50 to-love-100 rounded-2xl p-4 mb-4 border-2 border-love-200 text-center">
             <span className="text-4xl font-black text-love-600 tracking-[0.3em]">{roomId}</span>
@@ -189,13 +223,14 @@ export default function Room() {
               onClick={shareRoom}
               className="flex-1 btn-love flex items-center justify-center gap-2 text-sm py-2"
             >
-              📤 Compartilhar Link
+              <Share2 size={16} />
+              Compartilhar Link
             </motion.button>
           </div>
         </div>
 
         {/* Players connected */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-4 shadow-xl shadow-love-200/30 border-2 border-love-100 mb-4">
+        <div className="pixel-border bg-white/80 backdrop-blur-sm rounded-3xl p-4 shadow-xl shadow-love-200/30 border-2 border-love-100 mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Users size={18} className="text-love-500" />
@@ -215,7 +250,7 @@ export default function Room() {
                   {player.avatar}
                 </div>
                 <span className="font-bold text-love-700">{player.name}</span>
-                {i === 0 && <span className="text-xs text-love-400">(criador)</span>}
+                {i === 0 && <span className="text-xs text-love-400 flex items-center gap-1"><Crown size={12} /> (criador)</span>}
               </motion.div>
             ))}
             {players.length < 2 && (
@@ -229,7 +264,7 @@ export default function Room() {
           </div>
         </div>
 
-        {/* Game selector */}
+        {/* Game selector — only the host can pick */}
         <AnimatePresence>
           {!waiting && players.length >= 2 && (
             <motion.div
@@ -239,32 +274,41 @@ export default function Room() {
             >
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles size={16} className="text-love-500" />
-                <span className="font-bold text-love-700">Escolham um jogo!</span>
+                <span className="font-bold text-love-700">
+                  {isCreator ? 'Escolham um jogo!' : 'Aguardando o criador escolher...'}
+                </span>
+                {!isCreator && <Heart size={14} className="text-love-300" />}
               </div>
               <div className="space-y-3">
-                {GAMES.map((game, i) => (
-                  <motion.button
-                    key={game.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.4 + i * 0.1 }}
-                    whileHover={{ scale: 1.02, x: 5 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => selectGame(game.id)}
-                    disabled={selectedGame !== null}
-                    className={`w-full ${game.bg} border-2 ${game.border} rounded-3xl p-4 flex items-center gap-4 
-                               transition-all duration-300 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    <span className="text-3xl">{game.emoji}</span>
-                    <div className="text-left flex-1">
-                      <h3 className="text-lg font-black text-gray-800">{game.name}</h3>
-                      <p className="text-gray-500 text-xs font-medium">{game.description}</p>
-                    </div>
-                    <div className={`w-10 h-10 rounded-full bg-gradient-to-r ${game.color} flex items-center justify-center shadow-md`}>
-                      <Gamepad2 className="w-5 h-5 text-white" />
-                    </div>
-                  </motion.button>
-                ))}
+                {GAMES.map((game, i) => {
+                  const Icon = game.icon;
+                  return (
+                    <motion.button
+                      key={game.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.4 + i * 0.1 }}
+                      whileHover={isCreator && selectedGame === null ? { scale: 1.02, x: 5 } : {}}
+                      whileTap={isCreator && selectedGame === null ? { scale: 0.98 } : {}}
+                      onClick={() => selectGame(game.id)}
+                      disabled={selectedGame !== null || !isCreator}
+                      className={`w-full ${game.bg} border-2 ${game.border} rounded-3xl p-4 flex items-center gap-4 
+                                 transition-all duration-300 hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed`}
+                    >
+                      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-r ${game.color} flex items-center justify-center shadow-md shrink-0`}>
+                        <Icon className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="text-left flex-1">
+                        <h3 className="text-lg font-black text-gray-800">{game.name}</h3>
+                        <p className="text-gray-500 text-xs font-medium">{game.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!isCreator && <span className="text-xs text-gray-400 font-bold">🔒</span>}
+                        {isCreator && <ChevronRight className="text-love-400" size={20} />}
+                      </div>
+                    </motion.button>
+                  );
+                })}
               </div>
             </motion.div>
           )}
@@ -274,11 +318,14 @@ export default function Room() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="bg-gradient-to-r from-love-400 to-love-600 rounded-3xl p-4 mb-4 text-white text-center cursor-pointer"
+          className="pixel-border bg-gradient-to-r from-love-400 to-love-600 rounded-3xl p-4 mb-4 text-white text-center cursor-pointer flex items-center justify-center gap-2"
           onClick={() => window.dispatchEvent(new CustomEvent('toggle-music'))}
         >
-          <p className="font-bold text-sm">🎵 Gustavo Mioto - Românticas</p>
-          <p className="text-xs text-love-100">Clique pra tocar enquanto jogam! 💕</p>
+          <Music size={18} />
+          <div>
+            <p className="font-bold text-sm">Gustavo Mioto - Românticas</p>
+            <p className="text-xs text-love-100">Clique pra tocar enquanto jogam!</p>
+          </div>
         </motion.div>
 
         {/* Waiting animation */}
@@ -291,9 +338,9 @@ export default function Room() {
             <motion.div
               animate={{ y: [0, -10, 0] }}
               transition={{ duration: 1.5, repeat: Infinity }}
-              className="text-4xl mb-3"
+              className="text-4xl mb-3 flex items-center justify-center"
             >
-              💕
+              <Heart className="text-love-400" size={40} fill="currentColor" />
             </motion.div>
             <p className="text-love-500 font-bold text-sm">
               Envie o link ou codigo para seu parceiro!

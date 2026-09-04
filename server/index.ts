@@ -25,7 +25,7 @@ interface Room {
   state: any;
   maxPlayers: number;
   messages: { id: string; sender: string; text: string; time: number }[];
-  scoreboard: { [playerName: string]: { tictactoe: number; hangman: number; memory: number; words: number; snake: number; runner: number; dodgeball: number; kitchen: number; total: number } };
+  scoreboard: { [playerName: string]: { tictactoe: number; hangman: number; memory: number; words: number; termo: number; snake: number; runner: number; dodgeball: number; kitchen: number; total: number } };
 }
 
 // Game rooms storage
@@ -98,7 +98,7 @@ function snakeTick(room: Room) {
       const winner = i === 0 ? room.players[1]?.name : room.players[0]?.name;
       io.to(room.id).emit('snake:gameOver', { winner, scores: room.state.snakeScores });
       if (winner) {
-        if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+        if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
         (room.scoreboard[winner] as any).snake++;
         room.scoreboard[winner].total++;
         io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });
@@ -112,7 +112,7 @@ function snakeTick(room: Room) {
         const winner = j === 0 ? room.players[1]?.name : room.players[0]?.name;
         io.to(room.id).emit('snake:gameOver', { winner, scores: room.state.snakeScores });
         if (winner) {
-          if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+          if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
           (room.scoreboard[winner] as any).snake++;
           room.scoreboard[winner].total++;
           io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });
@@ -129,7 +129,7 @@ function snakeTick(room: Room) {
         const winner = room.players[i]?.name;
         io.to(room.id).emit('snake:gameOver', { winner, scores: room.state.snakeScores });
         if (winner) {
-          if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+          if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
           (room.scoreboard[winner] as any).snake++;
           room.scoreboard[winner].total++;
           io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });
@@ -304,6 +304,10 @@ io.on('connection', (socket: Socket) => {
     const room = rooms.get(roomId);
     if (!room) return;
 
+    // Only the host (creator, player[0]) can pick a game
+    const creator = room.players[0];
+    if (!creator || creator.id !== socket.id) return;
+
     room.gameType = gameType;
     room.state = {};
 
@@ -312,7 +316,8 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('room:backToRoom', ({ roomId }: { roomId: string }) => {
-    socket.to(roomId).emit('room:backToRoom');
+    // Notify EVERYONE in the room so both players return to the game selector
+    io.to(roomId).emit('room:backToRoom');
   });
 
   // ===== CHAT =====
@@ -356,7 +361,7 @@ io.on('connection', (socket: Socket) => {
     const room = rooms.get(roomId);
     if (!room) return;
     if (!room.scoreboard[winnerName]) {
-      room.scoreboard[winnerName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+      room.scoreboard[winnerName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
     }
     if (room.scoreboard[winnerName][gameType as keyof typeof room.scoreboard[string]] !== undefined) {
       (room.scoreboard[winnerName] as any)[gameType]++;
@@ -414,7 +419,17 @@ io.on('connection', (socket: Socket) => {
           players: room.players.map(p => p.name),
         });
         if (room.players.length === 2) {
-          startWordRound(room);
+          initWordSearch(room);
+        }
+        break;
+
+      case 'termo':
+        socket.emit('game:assigned', {
+          playerIndex,
+          players: room.players.map(p => p.name),
+        });
+        if (room.players.length === 2) {
+          initTermoRound(room);
         }
         break;
     }
@@ -440,7 +455,7 @@ io.on('connection', (socket: Socket) => {
     const winnerIndex = winner === 'X' ? 0 : 1;
     const winnerName = room.players[winnerIndex]?.name;
     if (winnerName && room.scoreboard) {
-      if (!room.scoreboard[winnerName]) room.scoreboard[winnerName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+      if (!room.scoreboard[winnerName]) room.scoreboard[winnerName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
       room.scoreboard[winnerName].tictactoe++;
       room.scoreboard[winnerName].total++;
       io.to(roomId).emit('scoreboard:update', { scoreboard: room.scoreboard });
@@ -488,7 +503,7 @@ io.on('connection', (socket: Socket) => {
       io.to(roomId).emit('hangman:win');
       const guesserName = room.players[1]?.name;
       if (guesserName && room.scoreboard) {
-        if (!room.scoreboard[guesserName]) room.scoreboard[guesserName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+        if (!room.scoreboard[guesserName]) room.scoreboard[guesserName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
         room.scoreboard[guesserName].hangman++;
         room.scoreboard[guesserName].total++;
         io.to(roomId).emit('scoreboard:update', { scoreboard: room.scoreboard });
@@ -534,7 +549,7 @@ io.on('connection', (socket: Socket) => {
           if (memWinner >= 0) {
             const memWinnerName = room.players[memWinner]?.name;
             if (memWinnerName && room.scoreboard) {
-              if (!room.scoreboard[memWinnerName]) room.scoreboard[memWinnerName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+              if (!room.scoreboard[memWinnerName]) room.scoreboard[memWinnerName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
               room.scoreboard[memWinnerName].memory++;
               room.scoreboard[memWinnerName].total++;
               io.to(roomId).emit('scoreboard:update', { scoreboard: room.scoreboard });
@@ -555,31 +570,102 @@ io.on('connection', (socket: Socket) => {
     initMemoryGame(room);
   });
 
-  // ===== WORDS =====
+  // ===== CAÇA-PALAVRAS (word search, turn-based) =====
 
-  socket.on('words:submit', ({ roomId, word }: { roomId: string; word: string }) => {
+  socket.on('wordsearch:guess', ({ roomId, word }: { roomId: string; word: string }) => {
     const room = rooms.get(roomId);
-    if (!room || !room.state) return;
-    if (!room.state.submittedWords) room.state.submittedWords = {};
-    room.state.submittedWords[socket.id] = word;
-    socket.to(roomId).emit('words:submitted', { playerIndex: room.players.findIndex((p: any) => p.id === socket.id) });
-    if (Object.keys(room.state.submittedWords).length === 2) evaluateWordRound(room);
+    if (!room || !room.state.wsGrid) return;
+
+    const idx = room.players.findIndex((p: any) => p.id === socket.id);
+    if (idx === -1 || idx !== room.state.wsTurn) return; // not your turn
+
+    const normalized = (word || '').trim().toUpperCase();
+    const foundWord = room.state.wsWords.find((w: any) => !w.found && w.text === normalized);
+
+    if (foundWord) {
+      foundWord.found = true;
+      room.state.wsFoundCount++;
+      if (!room.state.wsScores) room.state.wsScores = { player1: 0, player2: 0 };
+      room.state.wsScores[`player${idx + 1}`] += 10;
+
+      io.to(room.id).emit('wordsearch:found', {
+        word: foundWord.text,
+        cells: foundWord.cells,
+        wordsFound: room.state.wsWords.filter((w: any) => w.found).map((w: any) => w.text),
+        scores: room.state.wsScores,
+        currentTurn: room.state.wsTurn,
+      });
+
+      if (room.state.wsFoundCount >= room.state.wsWords.length) {
+        wsEndWordSearch(room);
+      } else {
+        wsNextTurn(room);
+      }
+    } else {
+      io.to(room.id).emit('wordsearch:miss', { word: normalized, currentTurn: room.state.wsTurn });
+      wsNextTurn(room);
+    }
   });
 
-  socket.on('words:timeUp', ({ roomId }: { roomId: string }) => {
+  socket.on('wordsearch:pass', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
-    if (!room || !room.state) return;
-    if (!room.state.submittedWords) room.state.submittedWords = {};
-    if (!room.state.submittedWords[socket.id]) room.state.submittedWords[socket.id] = '';
-    if (Object.keys(room.state.submittedWords).length === 2) evaluateWordRound(room);
+    if (!room || !room.state.wsGrid) return;
+    wsNextTurn(room);
   });
 
-  socket.on('words:reset', ({ roomId }: { roomId: string }) => {
+  socket.on('wordsearch:reset', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (!room) return;
-    room.state.wordScores = { player1: 0, player2: 0 };
-    room.state.round = 0;
-    startWordRound(room);
+    initWordSearch(room);
+  });
+
+  // ===== TERMO (Wordle) =====
+
+  socket.on('termo:guess', ({ roomId, guess }: { roomId: string; guess: string }) => {
+    const room = rooms.get(roomId);
+    if (!room || !room.state.termoWord) return;
+
+    const idx = room.players.findIndex((p: any) => p.id === socket.id);
+    if (idx === -1) return;
+
+    const key = `player${idx + 1}`;
+    if (room.state.termoDone?.[key]) return;
+
+    const g = (guess || '').trim().toUpperCase();
+    if (g.length !== 5) return;
+
+    if (!room.state.termoGuesses[key].includes(g)) {
+      room.state.termoGuesses[key].push(g);
+    }
+    const statuses = termoEvaluate(g, room.state.termoWord);
+    room.state.termoStatuses[key] = statuses;
+    const solved = g === room.state.termoWord;
+
+    if (solved) {
+      room.state.termoSolved[key] = true;
+      room.state.termoScores[key] += 10;
+    }
+    if (solved || room.state.termoGuesses[key].length >= 6) {
+      room.state.termoDone[key] = true;
+    }
+
+    socket.emit('termo:guessResult', {
+      guess: g,
+      statuses,
+      solved,
+      attemptNumber: room.state.termoGuesses[key].length,
+      round: room.state.termoRound,
+    });
+
+    termoCheckRoundEnd(room);
+  });
+
+  socket.on('termo:reset', ({ roomId }: { roomId: string }) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    room.state.termoRound = 0;
+    room.state.termoScores = { player1: 0, player2: 0 };
+    initTermoRound(room);
   });
 
   // ===== DISCONNECT =====
@@ -884,53 +970,158 @@ function initMemoryGame(room: Room) {
   io.to(room.id).emit('memory:start', { cards, currentTurn: 0 });
 }
 
-function startWordRound(room: Room) {
+const WS_SIZE = 10;
+const WS_WORDS = ['AMOR', 'BEIJO', 'CARINHO', 'ABRACO', 'PAIXAO', 'ROMANCE', 'SORRISO', 'NAMORO', 'CORACAO', 'JUNTOS', 'FLORES', 'DANCA', 'VELAS', 'CHOCOLATE'];
+
+function initWordSearch(room: Room) {
   if (room.players.length < 2) return;
-  room.state.round = (room.state.round || 0) + 1;
-  if (!room.state.wordScores) room.state.wordScores = { player1: 0, player2: 0 };
-  room.state.submittedWords = {};
-  const category = WORD_CATEGORIES[Math.floor(Math.random() * WORD_CATEGORIES.length)];
-  const word = category.words[Math.floor(Math.random() * category.words.length)];
-  room.state.currentWord = word;
-  room.state.currentCategory = category.name;
-  io.to(room.id).emit('words:start', { word, category: category.name, timeLimit: 30, round: room.state.round });
+
+  const selected = [...WS_WORDS].sort(() => Math.random() - 0.5).slice(0, 5);
+  const grid: string[] = new Array(WS_SIZE * WS_SIZE).fill('');
+  const words: { text: string; cells: number[]; found: boolean }[] = [];
+
+  const dirs = [
+    { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: -1, dy: 1 },
+  ];
+
+  for (const w of selected) {
+    let placed = false;
+    for (let attempt = 0; attempt < 200 && !placed; attempt++) {
+      const dir = dirs[Math.floor(Math.random() * dirs.length)];
+      const row = Math.floor(Math.random() * WS_SIZE);
+      const col = Math.floor(Math.random() * WS_SIZE);
+      const endRow = row + dir.dy * (w.length - 1);
+      const endCol = col + dir.dx * (w.length - 1);
+      if (endRow < 0 || endRow >= WS_SIZE || endCol < 0 || endCol >= WS_SIZE) continue;
+
+      const cells: number[] = [];
+      let ok = true;
+      for (let i = 0; i < w.length; i++) {
+        const r = row + dir.dy * i;
+        const c = col + dir.dx * i;
+        const idx = r * WS_SIZE + c;
+        if (grid[idx] && grid[idx] !== w[i]) { ok = false; break; }
+        cells.push(idx);
+      }
+      if (!ok) continue;
+      cells.forEach((idx, i) => { grid[idx] = w[i]; });
+      words.push({ text: w, cells, found: false });
+      placed = true;
+    }
+  }
+
+  for (let i = 0; i < grid.length; i++) {
+    if (!grid[i]) grid[i] = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)];
+  }
+
+  room.state.wsGrid = grid;
+  room.state.wsWords = words;
+  room.state.wsScores = { player1: 0, player2: 0 };
+  room.state.wsTurn = 0;
+  room.state.wsFoundCount = 0;
+
+  io.to(room.id).emit('wordsearch:start', {
+    grid,
+    words: words.map(w => ({ text: w.text, cells: w.cells, found: w.found })),
+    scores: room.state.wsScores,
+    currentTurn: 0,
+  });
 }
 
-function evaluateWordRound(room: Room) {
-  if (!room.state.submittedWords || !room.state.currentWord) return;
-  const targetWord = room.state.currentWord.toLowerCase();
-  const playerIds = room.players.map(p => p.id);
-  const results = playerIds.map((id, index) => ({
-    player: room.players[index].name,
-    correct: (room.state.submittedWords[id] || '').toLowerCase() === targetWord,
-    word: room.state.submittedWords[id] || '',
-  }));
-  results.forEach((result, index) => {
-    if (result.correct) {
-      room.state.wordScores[`player${index + 1}`] += 10;
-    }
+function wsNextTurn(room: Room) {
+  room.state.wsTurn = room.state.wsTurn === 0 ? 1 : 0;
+  io.to(room.id).emit('wordsearch:turn', { currentTurn: room.state.wsTurn });
+}
+
+function wsEndWordSearch(room: Room) {
+  const s = room.state.wsScores;
+  const winner =
+    s.player1 > s.player2 ? room.players[0].name :
+    s.player2 > s.player1 ? room.players[1].name :
+    null;
+  io.to(room.id).emit('wordsearch:gameOver', { scores: s, winner });
+  if (winner && room.scoreboard) {
+    if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+    room.scoreboard[winner].words++;
+    room.scoreboard[winner].total++;
+    io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });
+  }
+}
+
+const TERMO_WORDS = ['AMIGO', 'BEIJO', 'PAIXA', 'FESTA', 'JOGOS', 'SONHO', 'FELIZ', 'SALAO', 'TEMPO', 'TERNO', 'LIVRO', 'PRAIA', 'BOLSA', 'FORTE', 'NOVEL', 'PLANO', 'CORPO', 'FOGUE'];
+
+function pickTermoWord(): string {
+  return TERMO_WORDS[Math.floor(Math.random() * TERMO_WORDS.length)];
+}
+
+function initTermoRound(room: Room) {
+  if (room.players.length < 2) return;
+  room.state.termoRound = (room.state.termoRound || 0) + 1;
+  if (!room.state.termoScores) room.state.termoScores = { player1: 0, player2: 0 };
+  room.state.termoWord = pickTermoWord();
+  room.state.termoGuesses = { player1: [], player2: [] };
+  room.state.termoStatuses = { player1: [], player2: [] };
+  room.state.termoSolved = { player1: false, player2: false };
+  room.state.termoDone = { player1: false, player2: false };
+  io.to(room.id).emit('termo:roundStart', { round: room.state.termoRound, scores: room.state.termoScores });
+}
+
+function termoEvaluate(guess: string, word: string): string[] {
+  const result = new Array(5).fill('absent');
+  const wordChars = word.split('');
+  const guessChars = guess.split('');
+  for (let i = 0; i < 5; i++) {
+    if (guessChars[i] === wordChars[i]) { result[i] = 'correct'; wordChars[i] = ''; guessChars[i] = ''; }
+  }
+  for (let i = 0; i < 5; i++) {
+    if (guessChars[i] === '') continue;
+    const j = wordChars.indexOf(guessChars[i]);
+    if (j >= 0) { result[i] = 'present'; wordChars[j] = ''; }
+  }
+  return result;
+}
+
+function termoCheckRoundEnd(room: Room) {
+  const done = room.state.termoDone;
+  if (!done.player1 || !done.player2) return;
+
+  const solved = room.state.termoSolved;
+  const scores = room.state.termoScores;
+  let winnerName: string | null = null;
+
+  if (solved.player1 && !solved.player2) winnerName = room.players[0].name;
+  else if (solved.player2 && !solved.player1) winnerName = room.players[1].name;
+  else if (solved.player1 && solved.player2) {
+    const a1 = room.state.termoGuesses.player1.length;
+    const a2 = room.state.termoGuesses.player2.length;
+    if (a1 < a2) winnerName = room.players[0].name;
+    else if (a2 < a1) winnerName = room.players[1].name;
+  }
+
+  io.to(room.id).emit('termo:roundEnd', {
+    word: room.state.termoWord,
+    winnerName,
+    scores,
+    round: room.state.termoRound,
   });
-  io.to(room.id).emit('words:roundResult', {
-    results,
-    scores: room.state.wordScores,
-    roundWords: { player1: room.state.submittedWords[playerIds[0]] || '', player2: room.state.submittedWords[playerIds[1]] || '' },
-  });
-  if (room.state.round >= 5) {
+
+  if (room.state.termoRound >= 5) {
     setTimeout(() => {
-      const wordsWinner = room.state.wordScores.player1 > room.state.wordScores.player2 ? room.players[0].name : room.players[1].name;
-      io.to(room.id).emit('words:gameOver', {
-        scores: room.state.wordScores,
-        winner: wordsWinner,
-      });
-      if (wordsWinner && room.scoreboard) {
-        if (!room.scoreboard[wordsWinner]) room.scoreboard[wordsWinner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
-        room.scoreboard[wordsWinner].words++;
-        room.scoreboard[wordsWinner].total++;
+      const s = room.state.termoScores;
+      const finalWinner =
+        s.player1 > s.player2 ? room.players[0].name :
+        s.player2 > s.player1 ? room.players[1].name :
+        null;
+      io.to(room.id).emit('termo:gameOver', { scores: s, winner: finalWinner });
+      if (finalWinner && room.scoreboard) {
+        if (!room.scoreboard[finalWinner]) room.scoreboard[finalWinner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+        room.scoreboard[finalWinner].termo++;
+        room.scoreboard[finalWinner].total++;
         io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });
       }
-    }, 3000);
+    }, 3500);
   } else {
-    setTimeout(() => startWordRound(room), 4000);
+    setTimeout(() => initTermoRound(room), 3500);
   }
 }
 
@@ -969,7 +1160,7 @@ function runnerTick(room: Room) {
     room.state.runnerGameOver = true;
     io.to(room.id).emit('runner:gameOver', { players: r.players, winner });
     if (winner) {
-      if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+      if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
       (room.scoreboard[winner] as any).runner++;
       room.scoreboard[winner].total++;
       io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });
@@ -1007,7 +1198,7 @@ function dodgeballTick(room: Room) {
     const winner = winnerIdx >= 0 ? room.players[winnerIdx]?.name : room.players[0]?.name;
     io.to(room.id).emit('dodgeball:gameOver', { players: db.players, winner });
     if (winner) {
-      if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+      if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
       (room.scoreboard[winner] as any).dodgeball++;
       room.scoreboard[winner].total++;
       io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });
@@ -1050,7 +1241,7 @@ function kitchenTick(room: Room) {
     if (k.score > 0) {
       const winner = room.players[0]?.name;
       if (winner) {
-        if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+        if (!room.scoreboard[winner]) room.scoreboard[winner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
         (room.scoreboard[winner] as any).kitchen++;
         room.scoreboard[winner].total++;
         io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });

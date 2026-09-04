@@ -69,6 +69,36 @@ body {
   }
 }
 
+/* Pixel art styles */
+.pixel-font {
+  font-family: 'Press Start 2P', monospace;
+  letter-spacing: 1px;
+}
+
+.pixel-border {
+  position: relative;
+  box-shadow:
+    0 4px 0 0 rgba(190, 18, 60, 0.25),
+    0 8px 0 0 rgba(190, 18, 60, 0.12);
+}
+
+.pixel-corner {
+  image-rendering: pixelated;
+}
+
+/* Pixel heart logo (pure CSS) */
+.pixel-heart {
+  width: 48px;
+  height: 44px;
+  background:
+    radial-gradient(circle at 50% 100%, #f43f5e 0, #f43f5e 45%, transparent 46%),
+    radial-gradient(circle at 0% 100%, #f43f5e 0, #f43f5e 45%, transparent 46%),
+    radial-gradient(circle at 100% 100%, #f43f5e 0, #f43f5e 45%, transparent 46%);
+  background-size: 50% 50%;
+  background-position: 0 0, 0 100%, 100% 0;
+  background-repeat: no-repeat;
+}
+
 /* Game card hover effect */
 .game-card {
   @apply relative overflow-hidden rounded-3xl p-6 transition-all duration-300;

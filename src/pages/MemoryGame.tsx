@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, RotateCcw, Heart, Trophy, Timer, ArrowRight } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Heart, Trophy, Timer, ArrowRight, Brain, LogOut } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -110,9 +110,12 @@ export default function MemoryGame() {
       showError(`${data.playerName} saiu do jogo 😢`);
       navigate(`/room/${roomId}`);
     });
+    const unsub8 = on('room:backToRoom', () => {
+      navigate(`/room/${roomId}`);
+    });
 
     return () => {
-      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7();
+      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8();
     };
   }, [roomId, playerName, emit, on, navigate]);
 
@@ -147,7 +150,10 @@ export default function MemoryGame() {
             <ArrowLeft size={20} />
             Trocar Jogo
           </motion.button>
-          <h1 className="text-xl font-black text-love-700">Memória 🧠</h1>
+          <h1 className="pixel-font text-sm font-black text-love-700 flex items-center gap-2">
+            <Brain size={18} className="text-love-500" />
+            JOGO DA MEMÓRIA
+          </h1>
           <div className="flex gap-2">
             {gameOver && (
               <motion.button
@@ -160,7 +166,7 @@ export default function MemoryGame() {
               </motion.button>
             )}
             <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => navigate('/')} className="text-red-400 font-bold text-xs">
-              🚪 Sair
+              <LogOut size={14} /> Sair
             </motion.button>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, X, TrendingUp } from 'lucide-react';
+import { Trophy, X, TrendingUp, Grid3x3, Target, Brain, Search, Keyboard } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 
 interface ScoreboardData {
@@ -9,6 +9,7 @@ interface ScoreboardData {
     hangman: number;
     memory: number;
     words: number;
+    termo: number;
     total: number;
   };
 }
@@ -18,11 +19,12 @@ interface ScoreboardProps {
   playerName: string;
 }
 
-const GAME_INFO: Record<string, { emoji: string; name: string }> = {
-  tictactoe: { emoji: '❌⭕', name: 'Velha' },
-  hangman: { emoji: '🎯', name: 'Forca' },
-  memory: { emoji: '🧠', name: 'Memoria' },
-  words: { emoji: '✍️', name: 'Palavras' },
+const GAME_INFO: Record<string, { icon: any; name: string }> = {
+  tictactoe: { icon: Grid3x3, name: 'Velha' },
+  hangman: { icon: Target, name: 'Forca' },
+  memory: { icon: Brain, name: 'Memoria' },
+  words: { icon: Search, name: 'Caça' },
+  termo: { icon: Keyboard, name: 'Termo' },
 };
 
 export default function Scoreboard({ roomId, playerName }: ScoreboardProps) {
@@ -125,17 +127,20 @@ export default function Scoreboard({ roomId, playerName }: ScoreboardProps) {
                       </div>
 
                       {/* Game breakdown */}
-                      <div className="grid grid-cols-4 gap-1">
-                        {Object.entries(GAME_INFO).map(([key, info]) => (
-                          <div key={key} className="text-center">
-                            <span className="text-xs">{info.emoji}</span>
-                            <p className={`text-xs font-bold ${
-                              (scores as any)[key] > 0 ? 'text-amber-600' : 'text-gray-300'
-                            }`}>
-                              {(scores as any)[key] || 0}
-                            </p>
-                          </div>
-                        ))}
+                      <div className="grid grid-cols-5 gap-1">
+                        {Object.entries(GAME_INFO).map(([key, info]) => {
+                          const Icon = info.icon;
+                          return (
+                            <div key={key} className="text-center">
+                              <Icon size={14} className={`mx-auto ${(scores as any)[key] > 0 ? 'text-amber-600' : 'text-gray-300'}`} />
+                              <p className={`text-xs font-bold ${
+                                (scores as any)[key] > 0 ? 'text-amber-600' : 'text-gray-300'
+                              }`}>
+                                {(scores as any)[key] || 0}
+                              </p>
+                            </div>
+                          );
+                        })}
                       </div>
                     </motion.div>
                   ))}

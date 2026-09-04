@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, RotateCcw, Heart, ArrowRight } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Heart, ArrowRight, Target, Type, LogOut } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -88,11 +88,14 @@ export default function Hangman() {
 
     const unsub8 = on('game:playerLeft', (data: { playerName: string }) => {
       showError(`${data.playerName} saiu do jogo 😢`);
-      navigate('/');
+      navigate(`/room/${roomId}`);
+    });
+    const unsub9 = on('room:backToRoom', () => {
+      navigate(`/room/${roomId}`);
     });
 
     return () => {
-      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8();
+      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9();
     };
   }, [roomId, playerName, emit, on, navigate]);
 
@@ -222,7 +225,10 @@ export default function Hangman() {
             <ArrowLeft size={20} />
             Trocar Jogo
           </motion.button>
-          <h1 className="text-xl font-black text-love-700">Jogo da Forca 💝</h1>
+          <h1 className="pixel-font text-sm font-black text-love-700 flex items-center gap-2">
+            <Target size={18} className="text-love-500" />
+            JOGO DA FORCA
+          </h1>
           <div className="flex gap-2">
             {gameState !== 'setup' && (
               <motion.button
@@ -234,8 +240,8 @@ export default function Hangman() {
                 <RotateCcw size={20} />
               </motion.button>
             )}
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => navigate('/')} className="text-red-400 font-bold text-xs">
-              🚪 Sair
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => navigate('/')} className="text-red-400 font-bold text-xs flex items-center gap-1">
+              <LogOut size={14} /> Sair
             </motion.button>
           </div>
         </div>
@@ -243,10 +249,10 @@ export default function Hangman() {
         {/* Players info */}
         <div className="flex justify-between items-center mb-4 text-sm">
           <div className={`px-3 py-1 rounded-full ${myRole === 'chooser' ? 'bg-love-500 text-white' : 'bg-love-100 text-love-600'}`}>
-            🎯 {players.chooser || 'Esperando...'}
+            <Target size={14} className="mr-1" /> {players.chooser || 'Esperando...'}
           </div>
           <div className={`px-3 py-1 rounded-full ${myRole === 'guesser' ? 'bg-love-500 text-white' : 'bg-love-100 text-love-600'}`}>
-            🔤 {players.guesser || 'Esperando...'}
+            <Type size={14} className="mr-1" /> {players.guesser || 'Esperando...'}
           </div>
         </div>
 
