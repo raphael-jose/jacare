@@ -68,15 +68,18 @@ export default function MemoryGame() {
       setPlayers(data.players);
     });
 
-    const unsub2 = on('memory:start', (data: { cards: Card[]; currentTurn: number }) => {
+    const unsub2 = on('memory:start', (data: { cards: Card[]; currentTurn: number; scores?: { player1: number; player2: number }; gameOver?: boolean }) => {
       setCards(data.cards);
       setCurrentTurn(data.currentTurn);
       setGameStarted(true);
       setFlippedCards([]);
-      setMatchedPairs(0);
+      // Derive progress from the server cards so a refresh mid-game doesn't
+      // reset the partner's visible progress bar.
+      setMatchedPairs(data.cards.filter(c => c.isMatched).length / 2);
       setMoves(0);
       setTimer(0);
-      setGameOver(false);
+      if (data.scores) setScores(data.scores);
+      setGameOver(!!data.gameOver);
     });
 
     const unsub3 = on('memory:flip', (data: { cardIndex: number; card: Card }) => {
@@ -128,12 +131,19 @@ export default function MemoryGame() {
     };
   }, [roomId, playerName, emit, on, navigate]);
 
+  // BUGFIX: score chips were hard-wired to player1/player2, which swapped
+  // the points shown to the guest (myIndex === 1). Resolve per index instead.
+  const myScore = myIndex === 0 ? scores.player1 : scores.player2;
+  const oppScore = myIndex === 0 ? scores.player2 : scores.player1;
+
   const handleCardClick = (index: number) => {
     if (!gameStarted || gameOver) return;
     if (cards[index].isFlipped || cards[index].isMatched) return;
     if (flippedCards.length >= 2) return;
     if (currentTurn !== myIndex) return;
 
+    // A completed attempt = opening the second card of the pair
+    if (flippedCards.length === 1) setMoves(m => m + 1);
     emit('memory:flip', { roomId, cardIndex: index });
   };
 
@@ -185,7 +195,7 @@ export default function MemoryGame() {
           <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${currentTurn === myIndex ? 'bg-love-500 text-white' : 'bg-white/80 text-love-600'}`}>
             <Heart size={16} fill={currentTurn === myIndex ? 'white' : 'currentColor'} />
             <span className="font-bold text-sm">{players[myIndex] || 'Você'}</span>
-            <span className="text-xs opacity-80">{scores.player1} pares</span>
+            <span className="text-xs opacity-80">{myScore} pares</span>
           </div>
           
           <div className="flex items-center gap-3 text-love-500 text-sm">
@@ -197,7 +207,7 @@ export default function MemoryGame() {
           </div>
           
           <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${currentTurn !== myIndex ? 'bg-love-500 text-white' : 'bg-white/80 text-love-600'}`}>
-            <span className="text-xs opacity-80">{scores.player2} pares</span>
+            <span className="text-xs opacity-80">{oppScore} pares</span>
             <span className="font-bold text-sm">{players[1 - myIndex] || 'Oponente'}</span>
             <Heart size={16} fill={currentTurn !== myIndex ? 'white' : 'currentColor'} />
           </div>
@@ -218,8 +228,8 @@ export default function MemoryGame() {
             >
               <Trophy className="text-love-500" />
               <span className="font-bold text-love-600">
-                {scores.player1 > scores.player2 ? 'Voce ganhou!' : 
-                 scores.player1 < scores.player2 ? `${players[1 - myIndex]} ganhou!` :
+                {myScore > oppScore ? 'Voce ganhou!' : 
+                 oppScore > myScore ? `${players[1 - myIndex] || 'Parceiro(a)'} ganhou!` :
                  'Empate!'}
               </span>
             </motion.div>

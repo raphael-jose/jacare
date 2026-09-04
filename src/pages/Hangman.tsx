@@ -78,7 +78,16 @@ export default function Hangman() {
       setTimeout(() => setMessage(''), 3000);
     });
 
-    const unsub7 = on('hangman:reset', () => {
+    // Restore state after refresh/reconnect mid-round
+    const unsub7 = on('hangman:state', (data: { word: string; guessedLetters: string[]; wrongGuesses: number; phase: 'setup' | 'playing' | 'won' | 'lost' }) => {
+      setWord(data.word);
+      setGuessedLetters(new Set(data.guessedLetters || []));
+      setWrongGuesses(data.wrongGuesses || 0);
+      setGameState(data.phase);
+      setShowInput(false);
+    });
+
+    const unsub8 = on('hangman:reset', () => {
       setGameState('setup');
       setGuessedLetters(new Set());
       setWrongGuesses(0);
@@ -86,16 +95,16 @@ export default function Hangman() {
       setShowInput(false);
     });
 
-    const unsub8 = on('game:playerLeft', (data: { playerName: string }) => {
+    const unsub9 = on('game:playerLeft', (data: { playerName: string }) => {
       showError(`${data.playerName} saiu do jogo`);
       navigate(`/room/${roomId}`, { state: { from: 'hangman' } });
     });
-    const unsub9 = on('room:backToRoom', () => {
+    const unsub10 = on('room:backToRoom', () => {
       navigate(`/room/${roomId}`, { state: { from: 'hangman' } });
     });
 
     return () => {
-      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9();
+      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); unsub10();
     };
   }, [roomId, playerName, emit, on, navigate]);
 

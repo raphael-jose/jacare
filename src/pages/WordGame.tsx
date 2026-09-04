@@ -41,10 +41,14 @@ export default function WordGame() {
   const [gameOver, setGameOver] = useState<string | null>(null);
   const [levelUp, setLevelUp] = useState<number | null>(null);
   const myTurn = currentTurn === myIndex;
+  // BUGFIX: resolve scores by player index — player1/player2 keys are fixed
+  // to index 0/1, so the chips were swapped for the guest (myIndex === 1).
+  const myScore = myIndex === 0 ? scores.player1 : scores.player2;
+  const oppScore = myIndex === 0 ? scores.player2 : scores.player1;
 
-  // Timer — only counts when it's my turn
+  // Timer — only counts when it's my turn and we're not between levels
   useEffect(() => {
-    if (!myTurn || gameOver) return;
+    if (!myTurn || gameOver || levelUp !== null) return;
     setTimeLeft(30);
     const interval = setInterval(() => {
       setTimeLeft(t => {
@@ -56,7 +60,7 @@ export default function WordGame() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [myTurn, gameOver, roomId, emit]);
+  }, [myTurn, gameOver, levelUp, roomId, emit]);
 
   useEffect(() => {
     emit('game:join', { roomId, gameType: 'words', playerName });
@@ -206,14 +210,14 @@ export default function WordGame() {
         <div className="flex justify-between items-center mb-3">
           <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${myTurn ? 'bg-love-500 text-white' : 'bg-white/80 text-love-600'}`}>
             <span className="font-bold text-sm">{players[myIndex] || 'Voce'}</span>
-            <span className="text-xs opacity-80">{scores.player1} pts</span>
+            <span className="text-xs opacity-80">{myScore} pts</span>
           </div>
           <div className="text-center px-2 py-1 rounded-xl bg-white/80 border-2 border-love-100">
             <p className="pixel-font text-[10px] text-love-600 font-bold">NÍVEL {level}/{totalLevels}</p>
             <p className="text-[10px] text-love-400 font-bold">{LEVEL_NAMES[level - 1] || ''}</p>
           </div>
           <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${!myTurn && !gameOver ? 'bg-love-500 text-white' : 'bg-white/80 text-love-600'}`}>
-            <span className="text-xs opacity-80">{scores.player2} pts</span>
+            <span className="text-xs opacity-80">{oppScore} pts</span>
             <span className="font-bold text-sm">{players[1 - myIndex] || 'Oponente'}</span>
           </div>
         </div>

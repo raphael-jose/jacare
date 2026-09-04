@@ -36,6 +36,14 @@ export default function TicTacToe() {
   const [players, setPlayers] = useState<{ X: string; O: string }>({ X: '', O: '' });
   const [gameStarted, setGameStarted] = useState(false);
 
+  const checkWinner = useCallback((b: Board): { winner: string | null; line: number[] } => {
+    for (const combo of WINNING_COMBOS) {
+      const [a, bb, c] = combo;
+      if (b[a] && b[a] === b[bb] && b[a] === b[c]) return { winner: b[a], line: combo };
+    }
+    return { winner: null, line: [] };
+  }, []);
+
   useEffect(() => {
     emit('game:join', { roomId, gameType: 'tictactoe', playerName });
 
@@ -72,17 +80,27 @@ export default function TicTacToe() {
     const unsub8 = on('room:backToRoom', () => {
       navigate(`/room/${roomId}`, { state: { from: 'tictactoe' } });
     });
+    // Full state restore after a refresh/reconnect mid-game
+    const unsub9 = on('game:sync', (data: { board: Board; currentTurn: Player; scores: any }) => {
+      setBoard(data.board);
+      setCurrentTurn(data.currentTurn);
+      setScores(data.scores);
+      setGameStarted(true);
+      const result = checkWinner(data.board);
+      if (result.winner) {
+        setWinner(result.winner);
+        setWinningLine(result.line);
+      } else if (data.board.every(cell => cell !== null)) {
+        setWinner('draw');
+        setWinningLine([]);
+      } else {
+        setWinner(null);
+        setWinningLine([]);
+      }
+    });
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); };
-  }, [roomId, playerName, emit, on, navigate]);
-
-  const checkWinner = useCallback((b: Board): { winner: string | null; line: number[] } => {
-    for (const combo of WINNING_COMBOS) {
-      const [a, bb, c] = combo;
-      if (b[a] && b[a] === b[bb] && b[a] === b[c]) return { winner: b[a], line: combo };
-    }
-    return { winner: null, line: [] };
-  }, []);
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); };
+  }, [roomId, playerName, emit, on, navigate, checkWinner]);
 
   const handleCellClick = (index: number) => {
     if (!gameStarted || winner || board[index] || currentTurn !== mySymbol) return;

@@ -39,6 +39,25 @@ function generateRoomCode(): string {
   return randomBytes(3).toString('hex').toUpperCase();
 }
 
+// Uppercase, remove accents and any non A-Z characters.
+function normalizeLetters(s: string): string {
+  return (s || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z]/g, '');
+}
+
+// Phase of the hangman round derived from server state.
+function hangmanPhase(room: Room): 'setup' | 'playing' | 'won' | 'lost' {
+  if (!room.state.word) return 'setup';
+  const wordLetters = [...new Set((room.state.word as string).split(''))];
+  const guessed = (room.state.guessedLetters as string[]) || [];
+  if (wordLetters.every((l: string) => guessed.includes(l))) return 'won';
+  if ((room.state.wrongGuesses || 0) >= 6) return 'lost';
+  return 'playing';
+}
+
 const LOVE_WORDS = [
   'AMOR', 'BEIJO', 'CARINHO', 'TESAO', 'PAIXAO', 'ROMANCE', 'CASAL', 'CORACAO',
   'FELICIDADE', 'JUNTOS', 'PARCEIRO', 'COMPANHEIRO', 'ENCHENTE', 'APERTO',
@@ -397,6 +416,13 @@ io.on('connection', (socket: Socket) => {
         if (room.players.length === 2) {
           io.to(roomId).emit('game:start');
         }
+        // Sync current board/turn/scores so a refresh or reconnect doesn't
+        // leave the player with a blank board while the partner is mid-game.
+        socket.emit('game:sync', {
+          board: room.state.board || Array(9).fill(null),
+          currentTurn: room.state.currentTurn || 'X',
+          scores: room.state.scores || { X: 0, O: 0, draws: 0 },
+        });
         break;
 
       case 'hangman':
@@ -407,6 +433,16 @@ io.on('connection', (socket: Socket) => {
             guesser: room.players[1]?.name || '',
           },
         });
+        // Refresh / reconnect mid-round: replay the current state so the
+        // game doesn't silently reset for both players.
+        if (room.state.word) {
+          socket.emit('hangman:state', {
+            word: room.state.word,
+            guessedLetters: room.state.guessedLetters || [],
+            wrongGuesses: room.state.wrongGuesses || 0,
+            phase: hangmanPhase(room),
+          });
+        }
         break;
 
       case 'memory':
@@ -414,8 +450,23 @@ io.on('connection', (socket: Socket) => {
           playerIndex,
           players: room.players.map(p => p.name),
         });
-        if (room.players.length === 2) {
-          initMemoryGame(room);
+        // Boot exactly once when both are in; replay current state on rejoin
+        // (refresh / reconnect) so the game doesn't silently restart.
+        if (!room.state.memJoined) room.state.memJoined = [];
+        if (!room.state.memJoined.includes(socket.id)) room.state.memJoined.push(socket.id);
+        const memAllJoined = room.players.length >= 2 && room.players.every((p: any) => room.state.memJoined.includes(p.id));
+        if (memAllJoined) {
+          if (!room.state.memBooted) {
+            room.state.memBooted = true;
+            initMemoryGame(room);
+          } else if (room.state.cards) {
+            socket.emit('memory:start', {
+              cards: room.state.cards,
+              currentTurn: room.state.memoryCurrentTurn || 0,
+              scores: room.state.memoryScores || { player1: 0, player2: 0 },
+              gameOver: room.state.memoryGameOver || false,
+            });
+          }
         }
         break;
 
@@ -476,7 +527,15 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('game:move', ({ roomId, board, index, symbol }: any) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || !Array.isArray(board) || board.length !== 9) return;
+    // Server-side validation: the player must move with their own symbol,
+    // on their turn, into an empty cell. Prevents desync/double-move races.
+    const idx = room.players.findIndex((p: any) => p.id === socket.id);
+    const expected = idx === 0 ? 'X' : 'O';
+    if (symbol !== expected) return;
+    if ((room.state.currentTurn || 'X') !== symbol) return;
+    const prev = room.state.board || Array(9).fill(null);
+    if (prev[index] !== null) return;
     room.state.board = board;
     const nextTurn = symbol === 'X' ? 'O' : 'X';
     room.state.currentTurn = nextTurn;
@@ -520,22 +579,32 @@ io.on('connection', (socket: Socket) => {
   socket.on('hangman:word', ({ roomId, word }: { roomId: string; word: string }) => {
     const room = rooms.get(roomId);
     if (!room) return;
-    room.state.word = word;
+    // Only the chooser (player[0]) may submit a word, and only between rounds
+    const idx = room.players.findIndex((p: any) => p.id === socket.id);
+    if (idx !== 0 || hangmanPhase(room) !== 'setup') return;
+    // Normalize: remove accents and non-letters so the A-Z keyboard can
+    // always solve the word (accented words used to deadlock the game).
+    const clean = normalizeLetters(word);
+    if (clean.length < 2 || clean.length > 20) return;
+    room.state.word = clean;
     room.state.guessedLetters = [];
     room.state.wrongGuesses = 0;
-    io.to(roomId).emit('hangman:start', { word, hint: 'Adivinhe a palavra! 💕' });
+    io.to(roomId).emit('hangman:start', { word: clean, hint: 'Adivinhe a palavra!' });
   });
 
   socket.on('hangman:guess', ({ roomId, letter }: { roomId: string; letter: string }) => {
     const room = rooms.get(roomId);
-    if (!room || !room.state.word) return;
-    const isCorrect = room.state.word.includes(letter);
+    if (!room || !room.state.word || hangmanPhase(room) !== 'playing') return;
+    const l = (letter || '').toUpperCase();
+    if (!/^[A-Z]$/.test(l)) return;
     if (!room.state.guessedLetters) room.state.guessedLetters = [];
-    room.state.guessedLetters.push(letter);
+    if (room.state.guessedLetters.includes(l)) return; // no double counting
+    const isCorrect = room.state.word.includes(l);
+    room.state.guessedLetters.push(l);
     if (!isCorrect) room.state.wrongGuesses = (room.state.wrongGuesses || 0) + 1;
-    io.to(roomId).emit('hangman:guess', { letter, isCorrect });
+    io.to(roomId).emit('hangman:guess', { letter: l, isCorrect });
     const wordLetters = [...new Set((room.state.word as string).split(''))];
-    const allGuessed = wordLetters.every((l: string) => (room.state.guessedLetters as string[]).includes(l));
+    const allGuessed = wordLetters.every((x: string) => (room.state.guessedLetters as string[]).includes(x));
     if (allGuessed) {
       io.to(roomId).emit('hangman:win');
       const guesserName = room.players[1]?.name;
@@ -563,23 +632,34 @@ io.on('connection', (socket: Socket) => {
   socket.on('memory:flip', ({ roomId, cardIndex }: { roomId: string; cardIndex: number }) => {
     const room = rooms.get(roomId);
     if (!room || !room.state.cards) return;
+    // Only the player whose turn it is may flip (server-side enforcement)
+    const idx = room.players.findIndex((p: any) => p.id === socket.id);
+    if (idx === -1 || idx !== (room.state.memoryCurrentTurn || 0)) return;
     const card = room.state.cards[cardIndex];
     if (!card || card.isFlipped || card.isMatched) return;
     card.isFlipped = true;
-    const flippedCards = room.state.cards
-      .map((c: any, i: number) => ({ ...c, index: i }))
-      .filter((c: any) => c.isFlipped && !c.isMatched);
+    // CRITICAL FIX: evaluate pairs by INDEX on the LIVE array. The old code
+    // mapped cards to shallow copies and mutated the copies, so matched/
+    // flipped state never persisted server-side -> the game froze after the
+    // very first pair (no pair was ever matched or flipped back).
+    const flipped = room.state.cards
+      .map((c: any, i: number) => (c.isFlipped && !c.isMatched ? i : -1))
+      .filter((i: number) => i !== -1);
     io.to(roomId).emit('memory:flip', { cardIndex, card: { ...card } });
-    if (flippedCards.length === 2) {
-      const [c1, c2] = flippedCards;
+    if (flipped.length === 2) {
+      const i1 = flipped[0];
+      const i2 = flipped[1];
+      const c1 = room.state.cards[i1];
+      const c2 = room.state.cards[i2];
       if (c1.emoji === c2.emoji) {
         c1.isMatched = true;
         c2.isMatched = true;
         if (!room.state.memoryScores) room.state.memoryScores = { player1: 0, player2: 0 };
         room.state.memoryScores[`player${(room.state.memoryCurrentTurn || 0) + 1}`]++;
-        io.to(roomId).emit('memory:match', { card1: (c1 as any).index, card2: (c2 as any).index, scores: room.state.memoryScores, currentTurn: room.state.memoryCurrentTurn });
+        io.to(roomId).emit('memory:match', { card1: i1, card2: i2, scores: room.state.memoryScores, currentTurn: room.state.memoryCurrentTurn });
         const allMatched = room.state.cards.every((c: any) => c.isMatched);
         if (allMatched) {
+          room.state.memoryGameOver = true;
           io.to(roomId).emit('memory:gameOver', { scores: room.state.memoryScores });
           const memScores = room.state.memoryScores;
           const memWinner = memScores.player1 > memScores.player2 ? 0 : memScores.player2 > memScores.player1 ? 1 : -1;
@@ -594,9 +674,14 @@ io.on('connection', (socket: Socket) => {
           }
         }
       } else {
+        // CRITICAL FIX: flip both cards back on the SERVER too. Without this
+        // the cards stayed face-up forever, so every later flip left 3+ cards
+        // "flipped" and pairs were never evaluated again -> game stuck.
+        c1.isFlipped = false;
+        c2.isFlipped = false;
         const nextTurn = (room.state.memoryCurrentTurn || 0) === 0 ? 1 : 0;
         room.state.memoryCurrentTurn = nextTurn;
-        io.to(roomId).emit('memory:noMatch', { card1: (c1 as any).index, card2: (c2 as any).index, currentTurn: nextTurn });
+        io.to(roomId).emit('memory:noMatch', { card1: i1, card2: i2, currentTurn: nextTurn });
       }
     }
   });
@@ -611,7 +696,7 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('wordsearch:guess', ({ roomId, word }: { roomId: string; word: string }) => {
     const room = rooms.get(roomId);
-    if (!room || !room.state.wsGrid) return;
+    if (!room || !room.state.wsGrid || room.state.wsPaused) return;
 
     const idx = room.players.findIndex((p: any) => p.id === socket.id);
     if (idx === -1 || idx !== room.state.wsTurn) return; // not your turn
@@ -636,6 +721,9 @@ io.on('connection', (socket: Socket) => {
       if (room.state.wsFoundCount >= room.state.wsWords.length) {
         const currentLevel = room.state.wsLevel || 1;
         room.state.wsLastFinder = idx;
+        // Lock input during the level transition so timers/guesses can't
+        // churn turns while everyone watches the "level complete" banner.
+        room.state.wsPaused = true;
         if (currentLevel < WS_TOTAL_LEVELS) {
           io.to(room.id).emit('wordsearch:levelDone', { level: currentLevel, scores: room.state.wsScores });
           const roomId = room.id;
@@ -659,7 +747,10 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('wordsearch:pass', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
-    if (!room || !room.state.wsGrid) return;
+    if (!room || !room.state.wsGrid || room.state.wsPaused) return;
+    // Only the player whose turn it is may pass
+    const idx = room.players.findIndex((p: any) => p.id === socket.id);
+    if (idx === -1 || idx !== room.state.wsTurn) return;
     wsNextTurn(room);
   });
 
@@ -1027,6 +1118,7 @@ io.on('connection', (socket: Socket) => {
 });
 
 function initMemoryGame(room: Room) {
+  room.state.memoryGameOver = false;
   const shuffledIcons = [...MEMORY_ICONS].sort(() => Math.random() - 0.5).slice(0, 8);
   const cards = [...shuffledIcons, ...shuffledIcons]
     .sort(() => Math.random() - 0.5)
@@ -1095,6 +1187,7 @@ function initWordSearch(room: Room, level: number = 1) {
 
   room.state.wsGrid = grid;
   room.state.wsWords = words;
+  room.state.wsPaused = false;
   room.state.wsTurn = lvl > 1 ? (room.state.wsLastFinder === 0 ? 1 : 0) : 0;
   room.state.wsFoundCount = 0;
 
