@@ -3,18 +3,28 @@ import { HashRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
 
-// Unregister ALL old service workers — forces browser to fetch fresh files
+// One-time cleanup: unregister old PWA service workers and clear stale caches
+// Uses sessionStorage so it only runs once per browser session
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(registrations => {
-    for (const registration of registrations) {
-      registration.unregister();
+  if (!sessionStorage.getItem('sw_cleaned')) {
+    sessionStorage.setItem('sw_cleaned', '1');
+
+    // Unregister ALL old service workers
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister();
+      }
+    });
+
+    // Clear ALL caches (old PWA workbox caches)
+    if ('caches' in window) {
+      caches.keys().then((names) => {
+        for (const name of names) {
+          caches.delete(name);
+        }
+      });
     }
-    if (registrations.length > 0) {
-      console.log('[App] Unregistered', registrations.length, 'old service worker(s)');
-      // Force reload to get fresh files
-      window.location.reload();
-    }
-  });
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

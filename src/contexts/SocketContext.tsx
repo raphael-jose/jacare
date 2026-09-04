@@ -17,22 +17,31 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | null>(null);
 
 export function SocketProvider({ children }: { children: ReactNode }) {
+  // CRITICAL FIX: create the socket SYNCHRONOUSLY on first render.
+  // React runs child useEffect() hooks BEFORE the parent's useEffect().
+  // If we created the socket inside useEffect here, child pages (Room, Home)
+  // would call on()/emit() while socketRef.current is still null and every
+  // listener registration would silently no-op -> room join never worked for
+  // guests who landed directly on the room link.
   const socketRef = useRef<Socket | null>(null);
+  if (socketRef.current === null) {
+    console.log('[Socket] Connecting to', SOCKET_URL);
+    socketRef.current = io(SOCKET_URL, {
+      transports: ['polling', 'websocket'], // polling FIRST — more reliable for cold starts
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity, // never give up
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000, // 20s per attempt
+    });
+  }
+
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    console.log('[Socket] Connecting to', SOCKET_URL);
-    const socket = io(SOCKET_URL, {
-      transports: ['polling', 'websocket'],  // polling FIRST — more reliable for cold starts
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: Infinity,       // never give up
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,                        // 20s per attempt
-    });
-
-    socketRef.current = socket;
+    const socket = socketRef.current;
+    if (!socket) return;
 
     socket.on('connect', () => {
       console.log('[Socket] Connected!', socket.id);
@@ -49,7 +58,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
-      socket.disconnect();
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('connect_error');
     };
   }, []);
 
