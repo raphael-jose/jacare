@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Check, Heart, Users, Gamepad2, Sparkles, Crown, LogOut, Share2, Music, Clock, Grid3x3, Target, Brain, Search, Keyboard, ChevronRight, X } from 'lucide-react';
+import { Copy, Check, Heart, Users, Sparkles, Crown, LogOut, Share2, Music, Clock, Grid3x3, Target, Brain, Search, Keyboard, ChevronRight, Lock } from 'lucide-react';
+import AvatarBadge from '../components/AvatarBadge';
 import Swal from 'sweetalert2';
 import { useSocket } from '../contexts/SocketContext';
 import Chat from '../components/Chat';
@@ -20,7 +21,14 @@ const GAMES = [
 export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { emit, on, connected } = useSocket();
+
+  // Which game did we just leave ("Trocar Jogo")? Ignore a stale gameType
+  // that still points to that same game so we don't bounce back into it.
+  const fromGame = (location.state as { from?: string } | null)?.from;
+  const fromGameRef = useRef<string | undefined>(fromGame);
+  fromGameRef.current = fromGame;
 
   const { name: playerName, avatar, isCreator } = getPlayerInfo();
   const [players, setPlayers] = useState<{ name: string; avatar: string }[]>(isCreator ? [{ name: playerName, avatar }] : []);
@@ -36,7 +44,9 @@ export default function Room() {
       gotResponse.current = true;
       setPlayers(data.players);
       if (data.players.length >= 2) setWaiting(false);
-      if (data.gameType) {
+      // If the room points to a game we did NOT just leave (e.g. the host
+      // already picked a new one while we were navigating back), follow it.
+      if (data.gameType && data.gameType !== fromGameRef.current) {
         navigate(`/game/${data.gameType}/${roomId}`);
       }
     });
@@ -115,7 +125,7 @@ export default function Room() {
     const shareUrl = `${baseUrl}#/?join=${roomId}`;
 
     const shareData = {
-      title: 'Vem jogar comigo! 💕',
+      title: 'Vem jogar comigo!',
       text: `Entra na sala e coloca seu nome!\n\nCódigo: ${roomId}\n\nOu clique no link:`,
       url: shareUrl,
     };
@@ -137,10 +147,10 @@ export default function Room() {
     setTimeout(() => setCopied(false), 2000);
 
     await Swal.fire({
-      title: 'Link do convite 💕',
+      title: 'Link do convite',
       html: `<p style="margin-bottom:12px;font-size:14px;color:#9f1239">Envie para seu amor:</p>
              <div style="user-select:all;word-break:break-all;background:#fff1f2;border:2px solid #fecdd3;border-radius:12px;padding:12px;font-size:14px;color:#881337;font-weight:700">${shareUrl}</div>
-             <p style="margin-top:12px;font-size:13px;color:#fda4af">Link copiado! É só colar no WhatsApp 💬</p>`,
+             <p style="margin-top:12px;font-size:13px;color:#fda4af">Link copiado! E so colar no WhatsApp</p>`,
       confirmButtonText: 'Ok',
       confirmButtonColor: '#f43f5e',
     });
@@ -246,9 +256,7 @@ export default function Room() {
                 animate={{ opacity: 1, x: 0 }}
                 className="flex items-center gap-3 bg-love-50 rounded-xl px-4 py-2"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-love-400 to-love-600 flex items-center justify-center text-lg">
-                  {player.avatar}
-                </div>
+                <AvatarBadge avatar={player.avatar} name={player.name} size={32} />
                 <span className="font-bold text-love-700">{player.name}</span>
                 {i === 0 && <span className="text-xs text-love-400 flex items-center gap-1"><Crown size={12} /> (criador)</span>}
               </motion.div>
@@ -303,7 +311,7 @@ export default function Room() {
                         <p className="text-gray-500 text-xs font-medium">{game.description}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {!isCreator && <span className="text-xs text-gray-400 font-bold">🔒</span>}
+                        {!isCreator && <Lock size={14} className="text-gray-400" />}
                         {isCreator && <ChevronRight className="text-love-400" size={20} />}
                       </div>
                     </motion.button>

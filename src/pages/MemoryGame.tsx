@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, RotateCcw, Heart, Trophy, Timer, ArrowRight, Brain, LogOut } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Heart, Trophy, Timer, Brain, LogOut, Gift, Star, Music, Cake, Flower2, Moon, Sun } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -16,7 +16,16 @@ interface Card {
   isMatched: boolean;
 }
 
-const LOVE_EMOJIS = ['💕', '💗', '💖', '💘', '💝', '🥰', '😍', '💑', '💏', '🌹', '🦋', '✨', '🎵', '🎁', '🍓'];
+const CARD_ICONS: Record<string, any> = {
+  heart: Heart,
+  star: Star,
+  music: Music,
+  gift: Gift,
+  cake: Cake,
+  flower: Flower2,
+  moon: Moon,
+  sun: Sun,
+};
 
 export default function MemoryGame() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -107,11 +116,11 @@ export default function MemoryGame() {
     });
 
     const unsub7 = on('game:playerLeft', (data: { playerName: string }) => {
-      showError(`${data.playerName} saiu do jogo 😢`);
-      navigate(`/room/${roomId}`);
+      showError(`${data.playerName} saiu do jogo`);
+      navigate(`/room/${roomId}`, { state: { from: 'memory' } });
     });
     const unsub8 = on('room:backToRoom', () => {
-      navigate(`/room/${roomId}`);
+      navigate(`/room/${roomId}`, { state: { from: 'memory' } });
     });
 
     return () => {
@@ -144,7 +153,7 @@ export default function MemoryGame() {
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={() => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`); }}
+            onClick={() => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`, { state: { from: 'memory' } }); }}
             className="flex items-center gap-2 text-love-600 font-bold"
           >
             <ArrowLeft size={20} />
@@ -198,7 +207,7 @@ export default function MemoryGame() {
         <div className="text-center mb-4">
           {gameStarted && !gameOver && (
             <p className={`font-bold ${currentTurn === myIndex ? 'text-love-600 animate-pulse' : 'text-love-400'}`}>
-              {currentTurn === myIndex ? '✨ Sua vez!' : `Aguardando ${players[currentTurn]}...`}
+              {currentTurn === myIndex ? 'Sua vez!' : `Aguardando ${players[currentTurn]}...`}
             </p>
           )}
           {gameOver && (
@@ -209,9 +218,9 @@ export default function MemoryGame() {
             >
               <Trophy className="text-love-500" />
               <span className="font-bold text-love-600">
-                {scores.player1 > scores.player2 ? 'Você ganhou! 🎉' : 
-                 scores.player1 < scores.player2 ? `${players[1 - myIndex]} ganhou! 💕` :
-                 'Empate! 🤝'}
+                {scores.player1 > scores.player2 ? 'Voce ganhou!' : 
+                 scores.player1 < scores.player2 ? `${players[1 - myIndex]} ganhou!` :
+                 'Empate!'}
               </span>
             </motion.div>
           )}
@@ -245,9 +254,12 @@ export default function MemoryGame() {
                         animate={{ rotateY: 0 }}
                         exit={{ rotateY: 90 }}
                         transition={{ duration: 0.3 }}
-                        className={card.isMatched ? 'opacity-60' : ''}
+                        className={card.isMatched ? 'opacity-60 flex' : 'flex'}
                       >
-                        {card.emoji}
+                        {(() => {
+                          const Face = CARD_ICONS[card.emoji] || Heart;
+                          return <Face size={26} className="text-love-600" />;
+                        })()}
                       </motion.span>
                     ) : (
                       <motion.span
@@ -256,7 +268,7 @@ export default function MemoryGame() {
                         animate={{ rotateY: 0 }}
                         exit={{ rotateY: 90 }}
                       >
-                        💕
+                        <Heart size={26} className="text-white" fill="white" />
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -269,9 +281,9 @@ export default function MemoryGame() {
             <motion.div
               animate={{ rotate: [0, -10, 10, 0] }}
               transition={{ duration: 2, repeat: Infinity }}
-              className="text-5xl mb-4"
+              className="text-5xl mb-4 flex items-center justify-center"
             >
-              ⏳
+              <Timer size={52} className="text-love-300" />
             </motion.div>
             <p className="text-love-500 font-bold">
               Esperando os jogadores...

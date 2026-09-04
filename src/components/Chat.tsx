@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Send, X } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
+import AvatarBadge from './AvatarBadge';
 
 interface Message {
   id: string;
@@ -102,7 +103,9 @@ export default function Chat({ roomId, playerName }: ChatProps) {
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-love-400 to-love-600 p-4 text-white">
-              <h3 className="font-bold text-sm">💬 Chat da Sala</h3>
+              <h3 className="font-bold text-sm flex items-center gap-1.5">
+                <MessageCircle size={15} /> Chat da Sala
+              </h3>
               <p className="text-love-100 text-xs">Mensagens em tempo real</p>
             </div>
 
@@ -110,9 +113,9 @@ export default function Chat({ roomId, playerName }: ChatProps) {
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {messages.length === 0 && (
                 <div className="text-center text-love-300 text-sm py-8">
-                  <p className="text-3xl mb-2">💬</p>
+                  <MessageCircle size={34} className="mx-auto mb-2" />
                   <p>Nenhuma mensagem ainda</p>
-                  <p className="text-xs mt-1">Diga oi para seu amor! 💕</p>
+                  <p className="text-xs mt-1">Diga oi para seu amor!</p>
                 </div>
               )}
               {messages.map((msg) => (
@@ -122,9 +125,7 @@ export default function Chat({ roomId, playerName }: ChatProps) {
                   animate={{ opacity: 1, y: 0 }}
                   className={`flex gap-2 ${msg.sender === playerName ? 'flex-row-reverse' : 'flex-row'}`}
                 >
-                  <div className="w-7 h-7 rounded-full bg-love-100 flex items-center justify-center text-sm flex-shrink-0">
-                    {msg.avatar}
-                  </div>
+                  <AvatarBadge avatar={msg.avatar} name={msg.sender} size={28} />
                   <div className={`flex flex-col ${msg.sender === playerName ? 'items-end' : 'items-start'}`}>
                     <span className="text-xs text-love-400 mb-0.5 px-1">
                       {msg.sender} • {formatTime(msg.time)}

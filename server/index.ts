@@ -52,7 +52,7 @@ const WORD_CATEGORIES = [
   { name: 'Animais', emoji: '🐾', words: ['gato', 'cachorro', 'coelho', 'borboleta', 'passaro', 'tartaruga', 'panda', 'cavalo', 'peixe'] },
 ];
 
-const LOVE_EMOJIS = ['💕', '💗', '💖', '💘', '💝', '🥰', '😍', '💑', '💏', '🌹', '🦋', '✨', '🎵', '🎁', '🍓'];
+const MEMORY_ICONS = ['heart', 'star', 'music', 'gift', 'cake', 'flower', 'moon', 'sun'];
 
 // Chat message
 interface ChatMessage {
@@ -424,8 +424,28 @@ io.on('connection', (socket: Socket) => {
           playerIndex,
           players: room.players.map(p => p.name),
         });
-        if (room.players.length === 2) {
-          initWordSearch(room);
+        // Boot exactly once when both players have joined; replay current
+        // state to sockets that rejoin later (refresh / reconnect).
+        if (!room.state.wsJoined) room.state.wsJoined = [];
+        if (!room.state.wsJoined.includes(socket.id)) room.state.wsJoined.push(socket.id);
+        const wsAllJoined = room.players.length >= 2 && room.players.every((p: any) => room.state.wsJoined.includes(p.id));
+        if (wsAllJoined) {
+          if (!room.state.wsBooted) {
+            room.state.wsBooted = true;
+            room.state.wsScores = { player1: 0, player2: 0 };
+            room.state.wsLevel = 1;
+            initWordSearch(room, 1);
+          } else if (room.state.wsGrid) {
+            socket.emit('wordsearch:start', {
+              grid: room.state.wsGrid,
+              size: room.state.wsSize || 10,
+              level: room.state.wsLevel || 1,
+              totalLevels: room.state.wsTotalLevels || WS_TOTAL_LEVELS,
+              words: room.state.wsWords,
+              scores: room.state.wsScores || { player1: 0, player2: 0 },
+              currentTurn: room.state.wsTurn || 0,
+            });
+          }
         }
         break;
 
@@ -614,7 +634,20 @@ io.on('connection', (socket: Socket) => {
       });
 
       if (room.state.wsFoundCount >= room.state.wsWords.length) {
-        wsEndWordSearch(room);
+        const currentLevel = room.state.wsLevel || 1;
+        room.state.wsLastFinder = idx;
+        if (currentLevel < WS_TOTAL_LEVELS) {
+          io.to(room.id).emit('wordsearch:levelDone', { level: currentLevel, scores: room.state.wsScores });
+          const roomId = room.id;
+          setTimeout(() => {
+            const r = rooms.get(roomId);
+            if (r && r.state.wsGrid && (r.state.wsLevel || 1) === currentLevel && r.players.length === 2) {
+              initWordSearch(r, currentLevel + 1);
+            }
+          }, 4000);
+        } else {
+          wsEndWordSearch(room);
+        }
       } else {
         wsNextTurn(room);
       }
@@ -633,7 +666,10 @@ io.on('connection', (socket: Socket) => {
   socket.on('wordsearch:reset', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (!room) return;
-    initWordSearch(room);
+    room.state.wsLevel = 1;
+    room.state.wsBooted = true;
+    room.state.wsScores = { player1: 0, player2: 0 };
+    initWordSearch(room, 1);
   });
 
   // ===== TERMO (Wordle) =====
@@ -991,8 +1027,8 @@ io.on('connection', (socket: Socket) => {
 });
 
 function initMemoryGame(room: Room) {
-  const shuffledEmojis = [...LOVE_EMOJIS].sort(() => Math.random() - 0.5).slice(0, 8);
-  const cards = [...shuffledEmojis, ...shuffledEmojis]
+  const shuffledIcons = [...MEMORY_ICONS].sort(() => Math.random() - 0.5).slice(0, 8);
+  const cards = [...shuffledIcons, ...shuffledIcons]
     .sort(() => Math.random() - 0.5)
     .map((emoji, index) => ({ id: index, emoji, isFlipped: false, isMatched: false }));
   room.state.cards = cards;
@@ -1001,14 +1037,26 @@ function initMemoryGame(room: Room) {
   io.to(room.id).emit('memory:start', { cards, currentTurn: 0 });
 }
 
-const WS_SIZE = 10;
-const WS_WORDS = ['AMOR', 'BEIJO', 'CARINHO', 'ABRACO', 'PAIXAO', 'ROMANCE', 'SORRISO', 'NAMORO', 'CORACAO', 'JUNTOS', 'FLORES', 'DANCA', 'VELAS', 'CHOCOLATE'];
+const WS_LEVELS = [
+  { size: 8,  count: 4, words: ['AMOR', 'BEIJO', 'DANCA', 'VELAS', 'FLORES', 'LUA'] },
+  { size: 10, count: 6, words: ['AMOR', 'BEIJO', 'DANCA', 'VELAS', 'FLORES', 'CARINHO', 'ABRACO', 'SORRISO', 'NAMORO', 'ROMANCE'] },
+  { size: 12, count: 8, words: ['AMOR', 'BEIJO', 'CARINHO', 'ABRACO', 'SORRISO', 'NAMORO', 'ROMANCE', 'CORACAO', 'PAIXAO', 'JUNTOS', 'CHOCOLATE', 'FELICIDADE'] },
+];
+const WS_TOTAL_LEVELS = WS_LEVELS.length;
 
-function initWordSearch(room: Room) {
+function initWordSearch(room: Room, level: number = 1) {
   if (room.players.length < 2) return;
 
-  const selected = [...WS_WORDS].sort(() => Math.random() - 0.5).slice(0, 5);
-  const grid: string[] = new Array(WS_SIZE * WS_SIZE).fill('');
+  const lvl = Math.min(Math.max(level, 1), WS_TOTAL_LEVELS);
+  const cfg = WS_LEVELS[lvl - 1];
+  const size = cfg.size;
+  room.state.wsLevel = lvl;
+  room.state.wsSize = size;
+  room.state.wsTotalLevels = WS_TOTAL_LEVELS;
+  if (!room.state.wsScores) room.state.wsScores = { player1: 0, player2: 0 };
+
+  const selected = [...cfg.words].sort(() => Math.random() - 0.5).slice(0, cfg.count);
+  const grid: string[] = new Array(size * size).fill('');
   const words: { text: string; cells: number[]; found: boolean }[] = [];
 
   const dirs = [
@@ -1017,20 +1065,20 @@ function initWordSearch(room: Room) {
 
   for (const w of selected) {
     let placed = false;
-    for (let attempt = 0; attempt < 200 && !placed; attempt++) {
+    for (let attempt = 0; attempt < 400 && !placed; attempt++) {
       const dir = dirs[Math.floor(Math.random() * dirs.length)];
-      const row = Math.floor(Math.random() * WS_SIZE);
-      const col = Math.floor(Math.random() * WS_SIZE);
+      const row = Math.floor(Math.random() * size);
+      const col = Math.floor(Math.random() * size);
       const endRow = row + dir.dy * (w.length - 1);
       const endCol = col + dir.dx * (w.length - 1);
-      if (endRow < 0 || endRow >= WS_SIZE || endCol < 0 || endCol >= WS_SIZE) continue;
+      if (endRow < 0 || endRow >= size || endCol < 0 || endCol >= size) continue;
 
       const cells: number[] = [];
       let ok = true;
       for (let i = 0; i < w.length; i++) {
         const r = row + dir.dy * i;
         const c = col + dir.dx * i;
-        const idx = r * WS_SIZE + c;
+        const idx = r * size + c;
         if (grid[idx] && grid[idx] !== w[i]) { ok = false; break; }
         cells.push(idx);
       }
@@ -1047,15 +1095,17 @@ function initWordSearch(room: Room) {
 
   room.state.wsGrid = grid;
   room.state.wsWords = words;
-  room.state.wsScores = { player1: 0, player2: 0 };
-  room.state.wsTurn = 0;
+  room.state.wsTurn = lvl > 1 ? (room.state.wsLastFinder === 0 ? 1 : 0) : 0;
   room.state.wsFoundCount = 0;
 
   io.to(room.id).emit('wordsearch:start', {
     grid,
+    size,
+    level: lvl,
+    totalLevels: WS_TOTAL_LEVELS,
     words: words.map(w => ({ text: w.text, cells: w.cells, found: w.found })),
-    scores: room.state.wsScores,
-    currentTurn: 0,
+    scores: room.state.wsScores || { player1: 0, player2: 0 },
+    currentTurn: room.state.wsTurn,
   });
 }
 

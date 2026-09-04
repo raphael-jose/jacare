@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, X, TrendingUp, Grid3x3, Target, Brain, Search, Keyboard } from 'lucide-react';
+import { Trophy, X, TrendingUp, Grid3x3, Target, Brain, Search, Keyboard, Crown } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 
 interface ScoreboardData {
@@ -91,7 +91,7 @@ export default function Scoreboard({ roomId, playerName }: ScoreboardProps) {
             <div className="p-4">
               {sortedPlayers.length === 0 ? (
                 <div className="text-center py-6 text-amber-400">
-                  <p className="text-3xl mb-2">🏆</p>
+                  <Trophy size={36} className="mx-auto mb-2" />
                   <p className="text-sm font-bold">Nenhum jogo ainda</p>
                   <p className="text-xs mt-1">Joguem para ver o placar!</p>
                 </div>
@@ -112,8 +112,14 @@ export default function Scoreboard({ roomId, playerName }: ScoreboardProps) {
                       {/* Player header */}
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">
-                            {index === 0 ? '👑' : index === 1 ? '🥈' : '🥉'}
+                          <span className="flex items-center justify-center">
+                            {index === 0 ? (
+                              <Crown size={18} className="text-amber-500" />
+                            ) : (
+                              <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-[11px] font-black flex items-center justify-center">
+                                {index + 1}º
+                              </span>
+                            )}
                           </span>
                           <span className={`font-bold text-sm ${name === playerName ? 'text-amber-600' : 'text-gray-700'}`}>
                             {name}

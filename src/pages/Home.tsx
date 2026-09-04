@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Sparkles, Users, Plus } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
-import AvatarPicker from '../components/AvatarPicker';
+import AvatarPicker, { DEFAULT_AVATAR } from '../components/AvatarPicker';
 import { showError } from '../utils/alert';
 import { savePlayerInfo } from '../utils/player';
 
@@ -26,7 +26,7 @@ export default function Home() {
   const isInvite = !!joinCode;
 
   const [playerName, setPlayerName] = useState('');
-  const [avatar, setAvatar] = useState('🐱');
+  const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
   const [roomCode, setRoomCode] = useState(joinCode);
   const [isJoining, setIsJoining] = useState(false);
 
@@ -79,7 +79,7 @@ export default function Home() {
           
           <h1 className="text-4xl font-black text-love-700 mb-2">Love Games</h1>
           <p className="text-love-500 font-bold text-lg">
-            {isInvite ? 'Entre na sala do seu amor! 💕' : 'Jogos fofos para jogar com seu amor 💕'}
+            {isInvite ? 'Entre na sala do seu amor!' : 'Jogos fofos para jogar com seu amor'}
           </p>
           <div className="flex items-center justify-center gap-2 mt-2 text-love-400 text-sm">
             <Sparkles size={14} />
@@ -95,7 +95,7 @@ export default function Home() {
         >
           {/* Name input */}
           <div className="mb-4">
-            <label className="block text-sm font-bold text-love-600 mb-2">Seu nome 💕</label>
+            <label className="block text-sm font-bold text-love-600 mb-2">Seu nome</label>
             <input
               type="text"
               value={playerName}
@@ -178,19 +178,19 @@ export default function Home() {
         {/* How it works (only in normal mode) */}
         {!isInvite && (
           <motion.div variants={itemVariants} className="mt-6 bg-white/60 backdrop-blur-sm rounded-3xl p-5 border-2 border-love-100">
-            <h3 className="font-bold text-love-700 text-sm mb-3 text-center">Como funciona? 🤔</h3>
+            <h3 className="font-bold text-love-700 text-sm mb-3 text-center">Como funciona?</h3>
             <div className="space-y-2 text-sm text-love-600">
               <div className="flex items-start gap-3">
-                <span className="text-lg">1️⃣</span>
+                <span className="w-7 h-7 rounded-full bg-gradient-to-r from-love-400 to-love-600 text-white text-xs font-black flex items-center justify-center shrink-0 pixel-font">1</span>
                 <p>Crie uma sala e envie o codigo para seu parceiro</p>
               </div>
               <div className="flex items-start gap-3">
-                <span className="text-lg">2️⃣</span>
+                <span className="w-7 h-7 rounded-full bg-gradient-to-r from-love-400 to-love-600 text-white text-xs font-black flex items-center justify-center shrink-0 pixel-font">2</span>
                 <p>Quando os dois entrarem, escolham um jogo juntos</p>
               </div>
               <div className="flex items-start gap-3">
-                <span className="text-lg">3️⃣</span>
-                <p>Joguem e se divirtam! Tem chat tambem! 💬</p>
+                <span className="w-7 h-7 rounded-full bg-gradient-to-r from-love-400 to-love-600 text-white text-xs font-black flex items-center justify-center shrink-0 pixel-font">3</span>
+                <p>Joguem e se divirtam! Tem chat tambem!</p>
               </div>
             </div>
           </motion.div>
@@ -201,7 +201,7 @@ export default function Home() {
           <p className="flex items-center justify-center gap-2">
             Feito com <Heart className="w-4 h-4 text-love-500" fill="currentColor" /> para casais
           </p>
-          <p className="mt-1 text-love-300">Cada um em sua casa, mas juntos no jogo! 🏠💕</p>
+          <p className="mt-1 text-love-300">Cada um em sua casa, mas juntos no jogo!</p>
         </motion.div>
       </motion.div>
     </div>

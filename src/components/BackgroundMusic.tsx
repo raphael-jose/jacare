@@ -138,13 +138,15 @@ export default function BackgroundMusic() {
               style={{ width: 280 }}
             >
               <div className="flex items-center justify-between mb-2">
-                <p className="font-bold text-xs text-love-600">🎵 Gustavo Mioto</p>
+                <p className="font-bold text-xs text-love-600 flex items-center gap-1">
+                  <Music size={13} /> Gustavo Mioto
+                </p>
                 <button onClick={() => setShowPlayer(false)} className="text-love-300 hover:text-love-500">
                   <X size={14} />
                 </button>
               </div>
 
-              <p className="text-[10px] text-love-400 text-center mb-2">Controle compartilhado 💕</p>
+              <p className="text-[10px] text-love-400 text-center mb-2">Controle compartilhado</p>
 
               {/* Transport controls */}
               <div className="flex items-center justify-center gap-3 mb-3">
@@ -177,7 +179,7 @@ export default function BackgroundMusic() {
                 <span className="text-[10px] text-love-400 w-7 text-right">{isMuted ? 0 : volume}%</span>
               </div>
 
-              <p className="text-[10px] text-love-300 text-center mt-2">Ambos controlam a mesma música 🎶</p>
+              <p className="text-[10px] text-love-300 text-center mt-2">Ambos controlam a mesma musica</p>
             </motion.div>
           )}
         </AnimatePresence>

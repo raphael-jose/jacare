@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, RotateCcw, Heart, ArrowRight, Target, Type, LogOut } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Heart, ArrowRight, Target, Type, LogOut, Eye, Loader2 } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -87,11 +87,11 @@ export default function Hangman() {
     });
 
     const unsub8 = on('game:playerLeft', (data: { playerName: string }) => {
-      showError(`${data.playerName} saiu do jogo 😢`);
-      navigate(`/room/${roomId}`);
+      showError(`${data.playerName} saiu do jogo`);
+      navigate(`/room/${roomId}`, { state: { from: 'hangman' } });
     });
     const unsub9 = on('room:backToRoom', () => {
-      navigate(`/room/${roomId}`);
+      navigate(`/room/${roomId}`, { state: { from: 'hangman' } });
     });
 
     return () => {
@@ -202,8 +202,8 @@ export default function Hangman() {
       <line x1="71" y1="30" x2="77" y2="36" stroke="#f43f5e" strokeWidth="2"/>
       <line x1="77" y1="30" x2="71" y2="36" stroke="#f43f5e" strokeWidth="2"/>
       <path d="M64 42 Q70 38 76 42" fill="none" stroke="#f43f5e" strokeWidth="2"/>
-      {/* Dead X */}
-      <text x="68" y="95" fontSize="20" fill="#f43f5e" fontWeight="bold">💀</text>
+      {/* Dead X mouth */}
+      <path d="M66 46 Q70 42 74 46" fill="none" stroke="#f43f5e" strokeWidth="2"/>
     </svg>,
   ];
 
@@ -219,7 +219,7 @@ export default function Hangman() {
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
-            onClick={() => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`); }}
+            onClick={() => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`, { state: { from: 'hangman' } }); }}
             className="flex items-center gap-2 text-love-600 font-bold"
           >
             <ArrowLeft size={20} />
@@ -278,10 +278,12 @@ export default function Hangman() {
           >
             {myRole === 'chooser' ? (
               <div className="text-center">
-                <span className="text-5xl mb-4 block">🎯</span>
+                <div className="flex justify-center mb-4">
+                  <Target size={48} className="text-love-500" />
+                </div>
                 <h2 className="text-xl font-bold text-love-700 mb-2">Escolha a palavra!</h2>
                 <p className="text-love-500 text-sm mb-4">
-                  Digite uma palavra para seu amor adivinhar 💕
+                  Digite uma palavra para seu amor adivinhar
                 </p>
                 <input
                   type="text"
@@ -299,7 +301,7 @@ export default function Hangman() {
                   disabled={customWord.trim().length < 2}
                   className="w-full btn-love disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Enviar Palavra 💕
+                  Enviar Palavra
                 </motion.button>
               </div>
             ) : (
@@ -307,13 +309,13 @@ export default function Hangman() {
                 <motion.div
                   animate={{ rotate: [0, -10, 10, 0] }}
                   transition={{ duration: 2, repeat: Infinity }}
-                  className="text-5xl mb-4"
+                  className="text-5xl mb-4 flex items-center justify-center"
                 >
-                  ⏳
+                  <Loader2 size={52} className="text-love-300 animate-spin" />
                 </motion.div>
                 <h2 className="text-xl font-bold text-love-700 mb-2">Esperando...</h2>
                 <p className="text-love-500">
-                  Seu amor está escolhendo a palavra! 🥰
+                  Seu amor esta escolhendo a palavra!
                 </p>
               </div>
             )}
@@ -376,7 +378,7 @@ export default function Hangman() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="text-lg font-bold text-love-500 mt-2"
                   >
-                    🎉 Parabéns! Você acertou! 🎉
+                    Parabens! Voce acertou!
                   </motion.p>
                 )}
                 {gameState === 'lost' && (
@@ -385,7 +387,7 @@ export default function Hangman() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="text-lg font-bold text-love-500 mt-2"
                   >
-                    😢 Não foi dessa vez...
+                    Nao foi dessa vez...
                   </motion.p>
                 )}
               </div>
@@ -422,15 +424,15 @@ export default function Hangman() {
                 <motion.div
                   animate={{ rotate: [0, -5, 5, 0] }}
                   transition={{ duration: 2, repeat: Infinity }}
-                  className="text-4xl mb-3"
+                  className="text-4xl mb-3 flex items-center justify-center"
                 >
-                  👀
+                  <Eye size={44} className="text-love-400" />
                 </motion.div>
                 <p className="text-love-600 font-bold">
                   Seu amor está tentando adivinhar!
                 </p>
                 <p className="text-love-400 text-sm mt-1">
-                  Torça para ele/ela acertar! 💕
+                  Torca para ele/ela acertar!
                 </p>
               </div>
             )}
@@ -448,7 +450,7 @@ export default function Hangman() {
                   className="btn-love"
                 >
                   <RotateCcw className="inline w-5 h-5 mr-2" />
-                  Jogar Novamente 💕
+                  Jogar Novamente
                 </motion.button>
               </motion.div>
             )}

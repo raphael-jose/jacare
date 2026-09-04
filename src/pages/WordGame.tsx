@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, RotateCcw, Heart, Check, X, Timer, Search, Crown } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Heart, Check, X, Timer, Search, Crown, ChevronUp } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -15,15 +15,20 @@ interface WordInfo {
   found: boolean;
 }
 
+const LEVEL_NAMES = ['Facil', 'Medio', 'Dificil'];
+
 export default function WordGame() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { emit, on } = useSocket();
-  const { playClick, playCorrect, playWrong, playWin } = useSounds();
+  const { playClick, playCorrect, playWrong, playWin, playLevel } = useSounds();
 
   const { name: playerName } = getPlayerInfo();
 
   const [grid, setGrid] = useState<string[]>([]);
+  const [size, setSize] = useState(10);
+  const [level, setLevel] = useState(1);
+  const [totalLevels, setTotalLevels] = useState(3);
   const [words, setWords] = useState<WordInfo[]>([]);
   const [scores, setScores] = useState<{ player1: number; player2: number }>({ player1: 0, player2: 0 });
   const [currentTurn, setCurrentTurn] = useState(0);
@@ -34,6 +39,7 @@ export default function WordGame() {
   const [missedWord, setMissedWord] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(30);
   const [gameOver, setGameOver] = useState<string | null>(null);
+  const [levelUp, setLevelUp] = useState<number | null>(null);
   const myTurn = currentTurn === myIndex;
 
   // Timer — only counts when it's my turn
@@ -60,14 +66,18 @@ export default function WordGame() {
       setPlayers(data.players);
     });
 
-    const unsub2 = on('wordsearch:start', (data: { grid: string[]; words: WordInfo[]; scores: { player1: number; player2: number }; currentTurn: number }) => {
+    const unsub2 = on('wordsearch:start', (data: { grid: string[]; size: number; level: number; totalLevels: number; words: WordInfo[]; scores: { player1: number; player2: number }; currentTurn: number }) => {
       setGrid(data.grid);
+      setSize(data.size || Math.round(Math.sqrt(data.grid.length)) || 10);
+      setLevel(data.level || 1);
+      setTotalLevels(data.totalLevels || 3);
       setWords(data.words);
       setScores(data.scores);
       setCurrentTurn(data.currentTurn);
       setSelection([]);
       setFoundCells(new Set());
       setMissedWord(null);
+      setLevelUp(null);
       setGameOver(null);
     });
 
@@ -94,6 +104,12 @@ export default function WordGame() {
       setSelection([]);
     });
 
+    const unsubLevel = on('wordsearch:levelDone', (data: { level: number; scores: { player1: number; player2: number } }) => {
+      playLevel();
+      setLevelUp(data.level);
+      setScores(data.scores);
+    });
+
     const unsub6 = on('wordsearch:gameOver', (data: { scores: { player1: number; player2: number }; winner: string | null }) => {
       setScores(data.scores);
       setGameOver(data.winner);
@@ -101,15 +117,15 @@ export default function WordGame() {
     });
 
     const unsub7 = on('game:playerLeft', (data: { playerName: string }) => {
-      showError(`${data.playerName} saiu do jogo 😢`).then(() => navigate(`/room/${roomId}`));
+      showError(`${data.playerName} saiu do jogo`).then(() => navigate(`/room/${roomId}`, { state: { from: 'words' } }));
     });
 
     const unsub8 = on('room:backToRoom', () => {
-      navigate(`/room/${roomId}`);
+      navigate(`/room/${roomId}`, { state: { from: 'words' } });
     });
 
     return () => {
-      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8();
+      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsubLevel(); unsub6(); unsub7(); unsub8();
     };
   }, [roomId, playerName, emit, on, navigate]);
 
@@ -122,7 +138,7 @@ export default function WordGame() {
       // Toggle if last selected
       if (prev[prev.length - 1] === index) return prev.slice(0, -1);
       if (prev.includes(index)) return prev;
-      if (prev.length >= 8) return prev;
+      if (prev.length >= 12) return prev;
       return [...prev, index];
     });
   };
@@ -144,10 +160,11 @@ export default function WordGame() {
 
   const goBack = () => {
     emit('room:backToRoom', { roomId });
-    navigate(`/room/${roomId}`);
+    navigate(`/room/${roomId}`, { state: { from: 'words' } });
   };
 
   const selectedWord = selection.map(i => grid[i]).join('');
+  const cellTextClass = size >= 12 ? 'text-[10px] sm:text-xs' : size === 10 ? 'text-xs sm:text-sm' : 'text-sm sm:text-base';
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4">
@@ -167,8 +184,8 @@ export default function WordGame() {
             <ArrowLeft size={20} />
             Trocar Jogo
           </motion.button>
-          <h1 className="pixel-font text-lg font-black text-love-700 flex items-center gap-2">
-            <Search size={20} className="text-love-500" />
+          <h1 className="pixel-font text-sm font-black text-love-700 flex items-center gap-2">
+            <Search size={18} className="text-love-500" />
             CAÇA-PALAVRAS
           </h1>
           <div className="flex gap-2">
@@ -188,23 +205,31 @@ export default function WordGame() {
         {/* Players & turn */}
         <div className="flex justify-between items-center mb-3">
           <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${myTurn ? 'bg-love-500 text-white' : 'bg-white/80 text-love-600'}`}>
-            <span className="font-bold text-sm">{players[myIndex] || 'Você'}</span>
+            <span className="font-bold text-sm">{players[myIndex] || 'Voce'}</span>
             <span className="text-xs opacity-80">{scores.player1} pts</span>
           </div>
-          <div className="flex items-center gap-2 text-love-400">
-            {myTurn ? (
-              <span className="font-bold text-sm flex items-center gap-1">
-                <Timer size={14} className={timeLeft <= 5 ? 'text-red-500 animate-pulse' : ''} />
-                Sua vez! {timeLeft}s
-              </span>
-            ) : (
-              <span className="font-bold text-sm">Vez de {players[1 - myIndex] || 'oponente'}...</span>
-            )}
+          <div className="text-center px-2 py-1 rounded-xl bg-white/80 border-2 border-love-100">
+            <p className="pixel-font text-[10px] text-love-600 font-bold">NÍVEL {level}/{totalLevels}</p>
+            <p className="text-[10px] text-love-400 font-bold">{LEVEL_NAMES[level - 1] || ''}</p>
           </div>
           <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${!myTurn && !gameOver ? 'bg-love-500 text-white' : 'bg-white/80 text-love-600'}`}>
             <span className="text-xs opacity-80">{scores.player2} pts</span>
             <span className="font-bold text-sm">{players[1 - myIndex] || 'Oponente'}</span>
           </div>
+        </div>
+
+        {/* Turn / timer bar */}
+        <div className="flex items-center justify-center gap-2 mb-3 text-love-500">
+          {gameOver ? (
+            <span className="font-bold text-sm">Fim de jogo!</span>
+          ) : myTurn ? (
+            <span className="font-bold text-sm flex items-center gap-1">
+              <Timer size={14} className={timeLeft <= 5 ? 'text-red-500 animate-pulse' : ''} />
+              Sua vez! {timeLeft}s
+            </span>
+          ) : (
+            <span className="font-bold text-sm">Vez de {players[1 - myIndex] || 'oponente'}...</span>
+          )}
         </div>
 
         {/* Words to find */}
@@ -214,7 +239,7 @@ export default function WordGame() {
             {words.map((w) => (
               <span
                 key={w.text}
-                className={`px-3 py-1 rounded-full text-sm font-black border-2 ${
+                className={`px-3 py-1 rounded-full text-xs font-black border-2 ${
                   w.found
                     ? 'bg-green-50 border-green-300 text-green-600 line-through'
                     : 'bg-love-50 border-love-200 text-love-700'
@@ -226,10 +251,28 @@ export default function WordGame() {
           </div>
         </div>
 
+        {/* Level cleared banner */}
+        <AnimatePresence>
+          {levelUp !== null && !gameOver && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="bg-gradient-to-r from-emerald-400 to-teal-500 text-white rounded-3xl p-4 mb-4 text-center shadow-lg"
+            >
+              <p className="pixel-font text-xs font-bold mb-1">NÍVEL {levelUp} COMPLETO</p>
+              <p className="text-sm font-bold">Proximo nivel em instantes...</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Grid */}
         {grid.length > 0 && (
           <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-3 shadow-xl shadow-love-200/30 border-2 border-love-100 mb-4">
-            <div className="grid grid-cols-10 gap-1">
+            <div
+              className="grid gap-1"
+              style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
+            >
               {grid.map((letter, i) => {
                 const isSelected = selection.includes(i);
                 const isFound = foundCells.has(i);
@@ -238,12 +281,12 @@ export default function WordGame() {
                     key={i}
                     onClick={() => handleCellClick(i)}
                     disabled={!myTurn || !!gameOver || isFound}
-                    className={`aspect-square flex items-center justify-center rounded-md font-black text-sm sm:text-base transition-all ${
+                    className={`aspect-square flex items-center justify-center rounded font-black transition-all ${cellTextClass} ${
                       isFound
-                        ? 'bg-green-100 text-green-600 border-2 border-green-300'
+                        ? 'bg-green-100 text-green-600 border border-green-300'
                         : isSelected
-                          ? 'bg-love-500 text-white border-2 border-love-600 scale-110'
-                          : 'bg-love-50 text-love-700 border-2 border-love-100 hover:bg-love-100'
+                          ? 'bg-love-500 text-white border border-love-600 scale-110'
+                          : 'bg-love-50 text-love-700 border border-love-100 hover:bg-love-100'
                     } ${!myTurn ? 'opacity-70' : ''}`}
                   >
                     {letter}
@@ -268,7 +311,7 @@ export default function WordGame() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="text-xs text-red-500 font-bold mt-1 flex items-center justify-center gap-1"
                   >
-                    <X size={12} /> "{missedWord}" não está na lista!
+                    <X size={12} /> "{missedWord}" nao esta na lista!
                   </motion.p>
                 )}
               </div>
@@ -320,7 +363,7 @@ export default function WordGame() {
               >
                 <Crown className="text-amber-400" size={64} />
               </motion.div>
-              <h2 className="text-2xl font-black text-love-700 mb-4">Todas as palavras encontradas!</h2>
+              <h2 className="pixel-font text-sm font-black text-love-700 mb-4">TODOS OS NÍVEIS CONCLUÍDOS</h2>
 
               <div className="flex justify-center gap-8 mb-6">
                 <div className="text-center">
@@ -335,8 +378,16 @@ export default function WordGame() {
                 </div>
               </div>
 
-              <p className="text-lg font-bold text-love-600 mb-4">
-                {gameOver ? `🎉 ${gameOver} venceu!` : '🤝 Empate!'}
+              <p className="text-lg font-bold text-love-600 mb-4 flex items-center justify-center gap-2">
+                {gameOver ? (
+                  <>
+                    <Crown size={20} className="text-amber-500" /> {gameOver} venceu!
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp size={20} className="text-love-400" /> Empate!
+                  </>
+                )}
               </p>
 
               <motion.button

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, RotateCcw, LogOut, Grid3x3, Trophy } from 'lucide-react';
+import { ArrowLeft, RotateCcw, LogOut, Grid3x3, Trophy, Heart } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -67,10 +67,10 @@ export default function TicTacToe() {
     });
     const unsub7 = on('game:playerLeft', (data: { playerName: string }) => {
       showError(`${data.playerName} saiu do jogo`);
-      navigate(`/room/${roomId}`);
+      navigate(`/room/${roomId}`, { state: { from: 'tictactoe' } });
     });
     const unsub8 = on('room:backToRoom', () => {
-      navigate(`/room/${roomId}`);
+      navigate(`/room/${roomId}`, { state: { from: 'tictactoe' } });
     });
 
     return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); };
@@ -99,7 +99,7 @@ export default function TicTacToe() {
 
   const resetGame = () => emit('game:reset', { roomId });
 
-  const backToRoom = () => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`); };
+  const backToRoom = () => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`, { state: { from: 'tictactoe' } }); };
   const leaveRoom = () => navigate('/');
 
   const getCellMark = (value: string | null) => {
@@ -139,7 +139,7 @@ export default function TicTacToe() {
           </div>
           <div className="text-love-400 font-bold text-sm">VS</div>
           <div className={`text-center p-3 rounded-2xl flex-1 ml-2 ${mySymbol === 'O' ? 'bg-love-100 border-2 border-love-400' : 'bg-white/50 border-2 border-transparent'}`}>
-            <span className="text-2xl">💗</span>
+            <Heart size={22} className="text-rose-500 mx-auto" fill="currentColor" />
             <p className="font-bold text-love-700 text-sm truncate">{players.O || 'Esperando...'}</p>
             <p className="text-love-500 text-xs">{scores.O} vitorias</p>
           </div>
@@ -151,21 +151,21 @@ export default function TicTacToe() {
             winner ? (
               <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex items-center justify-center gap-2 text-lg font-bold">
                 {winner === 'draw' ? (
-                  <span className="text-love-500">Empate! 🤝</span>
+                  <span className="text-love-500">Empate!</span>
                 ) : (
                   <span className="text-love-600">
                     <Trophy className="inline w-5 h-5 mr-1" />
-                    {winner === mySymbol ? 'Voce ganhou! 🎉' : `${players[winner as Player]} ganhou! 💕`}
+                    {winner === mySymbol ? 'Voce ganhou!' : `${players[winner as Player]} ganhou!`}
                   </span>
                 )}
               </motion.div>
             ) : (
               <p className={`font-bold ${currentTurn === mySymbol ? 'text-love-600 animate-pulse' : 'text-love-400'}`}>
-                {currentTurn === mySymbol ? '✨ Sua vez!' : `Aguardando ${players[currentTurn]}...`}
+                {currentTurn === mySymbol ? 'Sua vez!' : `Aguardando ${players[currentTurn]}...`}
               </p>
             )
           ) : (
-            <p className="text-love-400 font-bold">Esperando o outro jogador... ⏳</p>
+            <p className="text-love-400 font-bold">Esperando o outro jogador...</p>
           )}
         </div>
 
@@ -195,7 +195,7 @@ export default function TicTacToe() {
         </div>
 
         <div className="text-center">
-          <p className="text-love-400 text-sm font-bold">Empates: {scores.draws} 🤝</p>
+          <p className="text-love-400 text-sm font-bold">Empates: {scores.draws}</p>
         </div>
       </motion.div>
 

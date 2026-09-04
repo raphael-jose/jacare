@@ -12,7 +12,7 @@ export function showAlert(title: string, text: string, icon: 'success' | 'error'
 }
 
 export function showError(message: string) {
-  return Swal.fire({ title: 'Ops! 😢', text: message, icon: 'error', ...baseTheme });
+  return Swal.fire({ title: 'Ops!', text: message, icon: 'error', ...baseTheme });
 }
 
 export function showSuccess(title: string, text?: string) {

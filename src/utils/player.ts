@@ -9,7 +9,7 @@ export function savePlayerInfo(name: string, avatar: string, isCreator: boolean 
 export function getPlayerInfo() {
   return {
     name: sessionStorage.getItem('playerName') || 'Jogador',
-    avatar: sessionStorage.getItem('playerAvatar') || '🐱',
+    avatar: sessionStorage.getItem('playerAvatar') || 'heart-rose',
     isCreator: sessionStorage.getItem('playerIsCreator') === '1',
   };
 }

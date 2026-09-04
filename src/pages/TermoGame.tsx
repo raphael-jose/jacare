@@ -143,11 +143,11 @@ export default function TermoGame() {
     });
 
     const unsub6 = on('game:playerLeft', (data: { playerName: string }) => {
-      showError(`${data.playerName} saiu do jogo 😢`).then(() => navigate(`/room/${roomId}`));
+      showError(`${data.playerName} saiu do jogo`).then(() => navigate(`/room/${roomId}`, { state: { from: 'termo' } }));
     });
 
     const unsub7 = on('room:backToRoom', () => {
-      navigate(`/room/${roomId}`);
+      navigate(`/room/${roomId}`, { state: { from: 'termo' } });
     });
 
     return () => {
@@ -175,7 +175,7 @@ export default function TermoGame() {
 
   const goBack = () => {
     emit('room:backToRoom', { roomId });
-    navigate(`/room/${roomId}`);
+    navigate(`/room/${roomId}`, { state: { from: 'termo' } });
   };
 
   // Keyboard letter colors from my statuses
@@ -317,8 +317,8 @@ export default function TermoGame() {
               <p className="text-3xl font-black tracking-[0.3em] text-love-700 my-2">{roundResult.word}</p>
               <p className="font-bold text-love-600">
                 {roundResult.winnerName
-                  ? `🏆 ${roundResult.winnerName} venceu a rodada!`
-                  : '🤝 Empate na rodada!'}
+                  ? `${roundResult.winnerName} venceu a rodada!`
+                  : 'Empate na rodada!'}
               </p>
               <p className="text-love-400 text-xs mt-1">
                 {roundResult.round < 5 ? 'Próxima rodada em breve...' : 'Calculando resultado final...'}
@@ -354,7 +354,7 @@ export default function TermoGame() {
                 </div>
               </div>
               <p className="text-lg font-bold text-love-600 mb-4">
-                {finalWinner ? `🎉 ${finalWinner} venceu!` : '🤝 Empate!'}
+                {finalWinner ? `${finalWinner} venceu!` : 'Empate!'}
               </p>
               <motion.button
                 whileHover={{ scale: 1.05 }}
