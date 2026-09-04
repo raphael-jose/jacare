@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, RotateCcw, Delete, Keyboard, Crown, Check } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Delete, Keyboard, Crown, Check, Loader2 } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -34,6 +34,7 @@ export default function TermoGame() {
   const [scores, setScores] = useState<{ player1: number; player2: number }>({ player1: 0, player2: 0 });
   const [players, setPlayers] = useState<string[]>([]);
   const [myIndex, setMyIndex] = useState(0);
+  const [currentTurn, setCurrentTurn] = useState(0);
   const [guesses, setGuesses] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<CellStatus[][]>([]);
   const [currentGuess, setCurrentGuess] = useState('');
@@ -43,7 +44,9 @@ export default function TermoGame() {
   const [finalWinner, setFinalWinner] = useState<string | null>(null);
 
   const attempt = guesses.length;
-  const canType = !solved && !roundResult && !gameOver;
+  const myTurn = currentTurn === myIndex;
+  const canType = myTurn && !solved && !roundResult && !gameOver;
+  const turnName = players[currentTurn] || (myTurn ? 'Você' : 'Parceiro(a)');
 
   useEffect(() => {
     emit('game:join', { roomId, gameType: 'termo', playerName });
@@ -53,15 +56,53 @@ export default function TermoGame() {
       setPlayers(data.players);
     });
 
-    const unsub2 = on('termo:roundStart', (data: { round: number; scores: { player1: number; player2: number } }) => {
+    const unsub2 = on('termo:roundStart', (data: { round: number; scores: { player1: number; player2: number }; currentTurn: number }) => {
       setRound(data.round);
       setScores(data.scores);
+      setCurrentTurn(data.currentTurn);
       setGuesses([]);
       setStatuses([]);
       setCurrentGuess('');
       setSolved(false);
       setRoundResult(null);
       setGameOver(false);
+    });
+
+    const unsubTurn = on('termo:turn', (data: { currentTurn: number }) => {
+      setCurrentTurn(data.currentTurn);
+    });
+
+    const unsubRejoin = on('termo:rejoin', (data: {
+      round: number;
+      scores: { player1: number; player2: number };
+      currentTurn: number;
+      phase: 'round' | 'result' | 'over';
+      word?: string;
+      winnerName?: string | null;
+      finalWinner?: string | null;
+      myGuesses: string[];
+      myStatuses: CellStatus[][];
+      mySolved: boolean;
+      myDone: boolean;
+    }) => {
+      setRound(data.round);
+      setScores(data.scores);
+      setCurrentTurn(data.currentTurn);
+      setGuesses(data.myGuesses || []);
+      setStatuses(data.myStatuses || []);
+      setCurrentGuess('');
+      setSolved(data.mySolved || false);
+      if (data.phase === 'over') {
+        setGameOver(true);
+        setFinalWinner(data.finalWinner || null);
+        setRoundResult(null);
+      } else if (data.phase === 'result') {
+        setRoundResult({ word: data.word || '', winnerName: data.winnerName ?? null, round: data.round });
+        setGameOver(false);
+      } else {
+        setGameOver(false);
+        setRoundResult(null);
+      }
     });
 
     const unsub3 = on('termo:guessResult', (data: { guess: string; statuses: CellStatus[]; solved: boolean; attemptNumber: number }) => {
@@ -110,7 +151,7 @@ export default function TermoGame() {
     });
 
     return () => {
-      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7();
+      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsubTurn(); unsubRejoin();
     };
   }, [roomId, playerName, emit, on, navigate]);
 
@@ -226,17 +267,19 @@ export default function TermoGame() {
 
         {/* Round & players */}
         <div className="flex justify-between items-center mb-4">
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${myIndex === 0 ? 'bg-love-500 text-white' : 'bg-white/80 text-love-600'}`}>
-            <span className="font-bold text-sm">{players[myIndex] || 'Você'}</span>
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${currentTurn === 0 ? 'bg-love-500 text-white shadow-lg' : 'bg-white/80 text-love-600'}`}>
+            <span className="font-bold text-sm">{players[0] || 'Jogador 1'}</span>
+            {currentTurn === 0 && <Loader2 size={14} className="animate-spin" />}
             <span className="text-xs opacity-80">{scores.player1} pts</span>
           </div>
           <div className="text-center">
             <p className="pixel-font text-love-600 font-bold text-sm">RODADA {round}/5</p>
-            <p className="text-love-400 text-xs">Mesma palavra para os dois!</p>
+            <p className="text-love-400 text-xs">Palavra secreta • 1 por vez</p>
           </div>
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${myIndex === 1 ? 'bg-love-500 text-white' : 'bg-white/80 text-love-600'}`}>
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl ${currentTurn === 1 ? 'bg-love-500 text-white shadow-lg' : 'bg-white/80 text-love-600'}`}>
             <span className="text-xs opacity-80">{scores.player2} pts</span>
-            <span className="font-bold text-sm">{players[1 - myIndex] || 'Oponente'}</span>
+            {currentTurn === 1 && <Loader2 size={14} className="animate-spin" />}
+            <span className="font-bold text-sm">{players[1] || 'Jogador 2'}</span>
           </div>
         </div>
 
@@ -248,11 +291,16 @@ export default function TermoGame() {
           <div className="text-center mt-3 min-h-[1.5rem]">
             {solved && !roundResult && (
               <p className="text-green-600 font-bold text-sm flex items-center justify-center gap-1">
-                <Check size={16} /> Acertou! Aguardando seu amor terminar...
+                <Check size={16} /> Acertou! Parabéns!
               </p>
             )}
-            {!canType && attempt >= 6 && !solved && !roundResult && !gameOver && (
-              <p className="text-red-500 font-bold text-sm">Tentativas esgotadas! Aguardando...</p>
+            {!solved && !roundResult && !gameOver && !myTurn && (
+              <p className="text-love-500 font-bold text-sm flex items-center justify-center gap-1">
+                <Loader2 size={14} className="animate-spin" /> Vez de {turnName}...
+              </p>
+            )}
+            {!solved && !roundResult && !gameOver && myTurn && (
+              <p className="text-love-600 font-bold text-sm">Sua vez! Digite uma palavra de 5 letras</p>
             )}
           </div>
         </div>

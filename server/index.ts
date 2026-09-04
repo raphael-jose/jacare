@@ -316,6 +316,12 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('room:backToRoom', ({ roomId }: { roomId: string }) => {
+    const room = rooms.get(roomId);
+    if (room) {
+      // Clear the current game so Room.tsx doesn't auto-redirect back into it
+      room.gameType = null;
+      room.state = {};
+    }
     // Notify EVERYONE in the room so both players return to the game selector
     io.to(roomId).emit('room:backToRoom');
   });
@@ -428,8 +434,19 @@ io.on('connection', (socket: Socket) => {
           playerIndex,
           players: room.players.map(p => p.name),
         });
-        if (room.players.length === 2) {
-          initTermoRound(room);
+        // Both players are already in the room roster, so the two game:join
+        // events would each boot the game. Boot exactly ONCE; on later joins
+        // (refresh / reconnect) replay the current state instead.
+        if (!room.state.termoJoined) room.state.termoJoined = [];
+        if (!room.state.termoJoined.includes(socket.id)) room.state.termoJoined.push(socket.id);
+        const allJoined = room.players.length >= 2 && room.players.every((p: any) => room.state.termoJoined.includes(p.id));
+        if (allJoined) {
+          if (!room.state.termoBooted) {
+            room.state.termoBooted = true;
+            initTermoRound(room);
+          } else {
+            termoRejoin(room, socket, playerIndex);
+          }
         }
         break;
     }
@@ -631,6 +648,12 @@ io.on('connection', (socket: Socket) => {
     const key = `player${idx + 1}`;
     if (room.state.termoDone?.[key]) return;
 
+    // TURN-BASED: only the player whose turn it is may guess
+    if (idx !== room.state.termoTurn) {
+      socket.emit('termo:notYourTurn', { currentTurn: room.state.termoTurn });
+      return;
+    }
+
     const g = (guess || '').trim().toUpperCase();
     if (g.length !== 5) return;
 
@@ -640,24 +663,32 @@ io.on('connection', (socket: Socket) => {
     const statuses = termoEvaluate(g, room.state.termoWord);
     room.state.termoStatuses[key] = statuses;
     const solved = g === room.state.termoWord;
+    const attemptNumber = room.state.termoGuesses[key].length;
 
     if (solved) {
       room.state.termoSolved[key] = true;
       room.state.termoScores[key] += 10;
-    }
-    if (solved || room.state.termoGuesses[key].length >= 6) {
+      room.state.termoDone[key] = true;
+    } else if (attemptNumber >= 6) {
       room.state.termoDone[key] = true;
     }
 
+    // Feedback is private — only the guesser sees the letters/colors
     socket.emit('termo:guessResult', {
       guess: g,
       statuses,
       solved,
-      attemptNumber: room.state.termoGuesses[key].length,
+      attemptNumber,
       round: room.state.termoRound,
     });
 
-    termoCheckRoundEnd(room);
+    if (solved) {
+      termoFinishRound(room, room.players[idx]?.name || null);
+    } else if (room.state.termoDone.player1 && room.state.termoDone.player2) {
+      termoFinishRound(room, null);
+    } else {
+      termoPassTurn(room);
+    }
   });
 
   socket.on('termo:reset', ({ roomId }: { roomId: string }) => {
@@ -1063,7 +1094,17 @@ function initTermoRound(room: Room) {
   room.state.termoStatuses = { player1: [], player2: [] };
   room.state.termoSolved = { player1: false, player2: false };
   room.state.termoDone = { player1: false, player2: false };
-  io.to(room.id).emit('termo:roundStart', { round: room.state.termoRound, scores: room.state.termoScores });
+  // Phase flags for rejoin support
+  room.state.termoResult = false;
+  room.state.termoGameOver = false;
+  room.state.termoFinalWinner = null;
+  // Whoever starts alternates each round for fairness
+  room.state.termoTurn = (room.state.termoRound - 1) % 2;
+  io.to(room.id).emit('termo:roundStart', {
+    round: room.state.termoRound,
+    scores: room.state.termoScores,
+    currentTurn: room.state.termoTurn,
+  });
 }
 
 function termoEvaluate(guess: string, word: string): string[] {
@@ -1081,23 +1122,35 @@ function termoEvaluate(guess: string, word: string): string[] {
   return result;
 }
 
-function termoCheckRoundEnd(room: Room) {
-  const done = room.state.termoDone;
-  if (!done.player1 || !done.player2) return;
+function termoPassTurn(room: Room) {
+  room.state.termoTurn = room.state.termoTurn === 0 ? 1 : 0;
+  io.to(room.id).emit('termo:turn', { currentTurn: room.state.termoTurn });
+}
 
-  const solved = room.state.termoSolved;
+function termoRejoin(room: Room, socket: Socket, idx: number) {
+  const key = `player${idx + 1}`;
+  const round = room.state.termoRound || 1;
+  const scores = room.state.termoScores || { player1: 0, player2: 0 };
+  const phase = room.state.termoGameOver ? 'over' : room.state.termoResult ? 'result' : 'round';
+  socket.emit('termo:rejoin', {
+    round,
+    scores,
+    currentTurn: room.state.termoTurn ?? 0,
+    phase,
+    word: phase === 'round' ? undefined : room.state.termoWord,
+    winnerName: phase === 'result' ? (room.state.termoResultWinner || null) : undefined,
+    finalWinner: phase === 'over' ? (room.state.termoFinalWinner || null) : undefined,
+    myGuesses: room.state.termoGuesses?.[key] || [],
+    myStatuses: room.state.termoStatuses?.[key] || [],
+    mySolved: !!room.state.termoSolved?.[key],
+    myDone: !!room.state.termoDone?.[key],
+  });
+}
+
+function termoFinishRound(room: Room, winnerName: string | null) {
   const scores = room.state.termoScores;
-  let winnerName: string | null = null;
-
-  if (solved.player1 && !solved.player2) winnerName = room.players[0].name;
-  else if (solved.player2 && !solved.player1) winnerName = room.players[1].name;
-  else if (solved.player1 && solved.player2) {
-    const a1 = room.state.termoGuesses.player1.length;
-    const a2 = room.state.termoGuesses.player2.length;
-    if (a1 < a2) winnerName = room.players[0].name;
-    else if (a2 < a1) winnerName = room.players[1].name;
-  }
-
+  room.state.termoResult = true;
+  room.state.termoResultWinner = winnerName || null;
   io.to(room.id).emit('termo:roundEnd', {
     word: room.state.termoWord,
     winnerName,
@@ -1105,13 +1158,15 @@ function termoCheckRoundEnd(room: Room) {
     round: room.state.termoRound,
   });
 
-  if (room.state.termoRound >= 5) {
-    setTimeout(() => {
+  const advance = () => {
+    if (room.state.termoRound >= 5) {
       const s = room.state.termoScores;
       const finalWinner =
-        s.player1 > s.player2 ? room.players[0].name :
-        s.player2 > s.player1 ? room.players[1].name :
+        s.player1 > s.player2 ? room.players[0]?.name || null :
+        s.player2 > s.player1 ? room.players[1]?.name || null :
         null;
+      room.state.termoGameOver = true;
+      room.state.termoFinalWinner = finalWinner;
       io.to(room.id).emit('termo:gameOver', { scores: s, winner: finalWinner });
       if (finalWinner && room.scoreboard) {
         if (!room.scoreboard[finalWinner]) room.scoreboard[finalWinner] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
@@ -1119,10 +1174,11 @@ function termoCheckRoundEnd(room: Room) {
         room.scoreboard[finalWinner].total++;
         io.to(room.id).emit('scoreboard:update', { scoreboard: room.scoreboard });
       }
-    }, 3500);
-  } else {
-    setTimeout(() => initTermoRound(room), 3500);
-  }
+    } else {
+      initTermoRound(room);
+    }
+  };
+  setTimeout(advance, 3500);
 }
 
 function runnerTick(room: Room) {
