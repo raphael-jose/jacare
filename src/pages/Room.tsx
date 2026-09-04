@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Copy, Check, Heart, Users, Gamepad2, Sparkles } from 'lucide-react';
@@ -18,18 +18,20 @@ const GAMES = [
 export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const { emit, on } = useSocket();
+  const { emit, on, connected } = useSocket();
 
   const { name: playerName, avatar, isCreator } = getPlayerInfo();
   const [players, setPlayers] = useState<{ name: string; avatar: string }[]>(isCreator ? [{ name: playerName, avatar }] : []);
   const [copied, setCopied] = useState(false);
   const [waiting, setWaiting] = useState(true);
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
+  const gotResponse = useRef(false);
 
   useEffect(() => {
     // 1) Register ALL listeners FIRST
     const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
       console.log('[Room] room:state received', data.players?.length, 'players');
+      gotResponse.current = true;
       setPlayers(data.players);
       if (data.players.length >= 2) setWaiting(false);
       if (data.gameType) {
@@ -39,6 +41,7 @@ export default function Room() {
 
     const unsub2 = on('room:playerJoined', (data: { players: { name: string; avatar: string }[]; playerName: string }) => {
       console.log('[Room] room:playerJoined received', data.playerName);
+      gotResponse.current = true;
       setPlayers(data.players);
       setWaiting(false);
     });
@@ -53,23 +56,49 @@ export default function Room() {
     });
 
     const unsub5 = on('room:backToRoom', () => {
+      gotResponse.current = false;
+      emit('room:join', { roomId, playerName, avatar });
       emit('room:getState', { roomId, playerName, avatar });
     });
 
-    // 2) Emit room:getState — it handles both reading state AND joining
-    const joinRoom = () => emit('room:getState', { roomId, playerName, avatar });
+    // Listen for room:joined — the response to room:join (answered by every server version)
+    const unsub6 = on('room:joined', (data: { roomId: string; players: { name: string; avatar: string }[] }) => {
+      console.log('[Room] room:joined received with', data.players?.length, 'players');
+      gotResponse.current = true;
+      setPlayers(data.players);
+      if (data.players.length >= 2) setWaiting(false);
+    });
+
+    // 2) Join the room ONCE. socket.io buffers events sent before the socket connects,
+    //    so a single emit at mount is enough. Repeated timed re-emits would double-add
+    //    players on older server builds, so we only re-join when the socket (re)connects
+    //    and we haven't received any server response yet.
+    const joinRoom = () => {
+      gotResponse.current = false;
+      emit('room:join', { roomId, playerName, avatar });
+      emit('room:getState', { roomId, playerName, avatar });
+    };
     joinRoom();
-    const timers = [500, 1000, 2000, 3000, 5000].map(
-      ms => setTimeout(joinRoom, ms)
-    );
 
     console.log('[Room] Mounted, registering listeners and joining room', roomId, 'as', playerName);
 
     return () => {
-      unsub0(); unsub2(); unsub3(); unsub4(); unsub5();
-      timers.forEach(clearTimeout);
+      unsub0(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6();
     };
   }, [roomId, playerName, avatar, emit, on, navigate]);
+
+  // If the socket connects (or reconnects) after mount without any server response,
+  // re-emit the join once — the initial emit may have been sent before the socket
+  // finished connecting.
+  const rejoinedRef = useRef(false);
+  useEffect(() => {
+    if (connected && !gotResponse.current && !rejoinedRef.current) {
+      rejoinedRef.current = true;
+      console.log('[Room] Socket connected, re-joining room', roomId);
+      emit('room:join', { roomId, playerName, avatar });
+      emit('room:getState', { roomId, playerName, avatar });
+    }
+  }, [connected, roomId, playerName, avatar, emit]);
 
   const copyCode = async () => {
     await navigator.clipboard.writeText(roomId || '');
