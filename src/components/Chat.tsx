@@ -30,8 +30,19 @@ const EMOJIS = [
   '👀', '💪', '🤝', '🫶', '👫', '💏', '💑', '😴', '😝', '😤', '😭', '😡',
 ];
 
-// Giphy public beta key (override with VITE_GIPHY_KEY for production use)
-const GIPHY_KEY = import.meta.env.VITE_GIPHY_KEY || 'dc6zaTOxFJmzC';
+// Giphy is OPTIONAL: without VITE_GIPHY_KEY the chat shows a curated set of
+// couple GIFs (pixel art, shipped with the app) — no external API needed.
+const GIPHY_KEY = import.meta.env.VITE_GIPHY_KEY || '';
+const HAS_GIPHY = !!GIPHY_KEY;
+const GIF_BASE = import.meta.env.BASE_URL || '/';
+const CURATED_GIFS = [
+  { label: 'Coração', url: `${GIF_BASE}gifs/heart.gif` },
+  { label: 'Dois corações', url: `${GIF_BASE}gifs/hearts2.gif` },
+  { label: 'Beijo', url: `${GIF_BASE}gifs/kiss.gif` },
+  { label: 'Abraço', url: `${GIF_BASE}gifs/hug.gif` },
+  { label: 'Brilhando', url: `${GIF_BASE}gifs/sparkle.gif` },
+  { label: 'Cartinha', url: `${GIF_BASE}gifs/letter.gif` },
+];
 
 export default function Chat({ roomId, playerName }: ChatProps) {
   const { emit, on } = useSocket();
@@ -144,10 +155,10 @@ export default function Chat({ roomId, playerName }: ChatProps) {
     reader.readAsDataURL(file);
   };
 
-  // --- giphy search ---
+  // --- giphy search (only when a key is configured) ---
   const searchGifs = async (q: string) => {
     const query = q.trim();
-    if (!query) return;
+    if (!query || !GIPHY_KEY) return;
     setGifLoading(true);
     setGifError(false);
     try {
@@ -353,43 +364,68 @@ export default function Chat({ roomId, playerName }: ChatProps) {
                   exit={{ opacity: 0, height: 0 }}
                   className="border-t border-love-100 bg-white"
                 >
-                  <div className="flex gap-2 p-2">
-                    <input
-                      value={gifQuery}
-                      onChange={(e) => setGifQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && searchGifs(gifQuery)}
-                      placeholder="Buscar GIF (ex: beijo, amor)"
-                      className="flex-1 px-3 py-1.5 rounded-full bg-love-50 border border-love-200 text-sm focus:outline-none focus:border-love-400 text-love-700 placeholder-love-300"
-                      maxLength={60}
-                    />
-                    <button
-                      onClick={() => searchGifs(gifQuery)}
-                      disabled={gifLoading || !gifQuery.trim()}
-                      className="px-3 py-1 rounded-full bg-love-500 text-white text-xs font-bold disabled:opacity-40"
-                    >
-                      Buscar
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5 p-2 overflow-y-auto max-h-40">
-                    {gifLoading && (
-                      <div className="col-span-3 text-center text-love-400 text-xs py-4">Buscando GIFs...</div>
-                    )}
-                    {gifError && !gifLoading && (
-                      <div className="col-span-3 text-center text-love-400 text-xs py-4">
-                        Nenhum GIF encontrado. Tente outra busca!
+                  {HAS_GIPHY ? (
+                    <>
+                      <div className="flex gap-2 p-2">
+                        <input
+                          value={gifQuery}
+                          onChange={(e) => setGifQuery(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && searchGifs(gifQuery)}
+                          placeholder="Buscar GIF (ex: beijo, amor)"
+                          className="flex-1 px-3 py-1.5 rounded-full bg-love-50 border border-love-200 text-sm focus:outline-none focus:border-love-400 text-love-700 placeholder-love-300"
+                          maxLength={60}
+                        />
+                        <button
+                          onClick={() => searchGifs(gifQuery)}
+                          disabled={gifLoading || !gifQuery.trim()}
+                          className="px-3 py-1 rounded-full bg-love-500 text-white text-xs font-bold disabled:opacity-40"
+                        >
+                          Buscar
+                        </button>
                       </div>
-                    )}
-                    {gifResults.map((g, i) => (
-                      <img
-                        key={i}
-                        src={g.preview}
-                        alt="gif"
-                        loading="lazy"
-                        onClick={() => sendMedia('gif', g.url)}
-                        className="w-full h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 border border-love-100"
-                      />
-                    ))}
-                  </div>
+                      <div className="grid grid-cols-3 gap-1.5 p-2 overflow-y-auto max-h-40">
+                        {gifLoading && (
+                          <div className="col-span-3 text-center text-love-400 text-xs py-4">Buscando GIFs...</div>
+                        )}
+                        {gifError && !gifLoading && (
+                          <div className="col-span-3 text-center text-love-400 text-xs py-4">
+                            Nenhum GIF encontrado. Tente outra busca!
+                          </div>
+                        )}
+                        {gifResults.map((g, i) => (
+                          <img
+                            key={i}
+                            src={g.preview}
+                            alt="gif"
+                            loading="lazy"
+                            onClick={() => sendMedia('gif', g.url)}
+                            className="w-full h-16 object-cover rounded-lg cursor-pointer hover:opacity-80 border border-love-100"
+                          />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-2">
+                      <p className="text-[10px] font-bold text-love-400 mb-1.5 px-1">GIFs fofos pra mandar</p>
+                      <div className="grid grid-cols-3 gap-2 overflow-y-auto max-h-44">
+                        {CURATED_GIFS.map((g) => (
+                          <button
+                            key={g.label}
+                            onClick={() => sendMedia('gif', g.url)}
+                            className="flex flex-col items-center gap-0.5"
+                          >
+                            <img
+                              src={g.url}
+                              alt={g.label}
+                              loading="lazy"
+                              className="w-full h-16 object-cover rounded-lg border border-love-100 hover:opacity-80"
+                            />
+                            <span className="text-[9px] text-love-400 font-medium">{g.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
