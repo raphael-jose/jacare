@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Music, X, Play, Pause, SkipForward, SkipBack, Volume2, VolumeX } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { Music, X, Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Users, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../contexts/SocketContext';
 
@@ -11,16 +12,36 @@ declare global {
 }
 
 const PLAYLIST_ID = 'PL0ao6cotJFFUyWGfYx1jCnQHtpshpg3A5';
+const SHARED_KEY = 'lovegames:musicShared';
+
+function getRoomIdFromPath(path: string): string {
+  const m = path.match(/\/(?:room|game\/[^/]+)\/([A-Za-z0-9]+)/);
+  return m ? m[1] : '';
+}
 
 export default function BackgroundMusic() {
+  const location = useLocation();
+  const roomId = getRoomIdFromPath(location.pathname);
+  const inRoom = !!roomId;
+
   const [showPlayer, setShowPlayer] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(50);
   const [playerReady, setPlayerReady] = useState(false);
+  const [shared, setShared] = useState<boolean>(() => localStorage.getItem(SHARED_KEY) !== '0');
+
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const volumeTimeout = useRef<any>(null);
+  const syncTimer = useRef<any>(null);
+
+  // Refs so callbacks always see the current mode without re-subscribing
+  const sharedRef = useRef(shared);
+  const roomIdRef = useRef(roomId);
+  useEffect(() => { sharedRef.current = shared; }, [shared]);
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
+
   const { emit, on } = useSocket();
 
   // Load YouTube IFrame API
@@ -66,6 +87,39 @@ export default function BackgroundMusic() {
     });
   }, []);
 
+  // ---- Sync engine ----
+  // Pushes our current track + position + playing state so the partner mirrors us.
+  const pushSync = useCallback(() => {
+    if (!sharedRef.current || !roomIdRef.current) return;
+    const p = playerRef.current;
+    if (!p || !playerReady) return;
+    const videoId = p.getVideoData?.()?.video_id || '';
+    if (!videoId) return;
+    const time = Math.round(p.getCurrentTime?.() || 0);
+    const playing = p.getPlayerState?.() === 1;
+    emit('music:sync', { roomId: roomIdRef.current, videoId, time, playing });
+  }, [playerReady, emit]);
+
+  // Debounced push (next/prev need a moment to actually load the new track)
+  const syncSoon = useCallback((ms = 700) => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(pushSync, ms);
+  }, [pushSync]);
+
+  // Sends a simple control event only when sharing is ON and we're in a room
+  const sendCtrl = useCallback((event: string) => {
+    if (sharedRef.current && roomIdRef.current) {
+      emit(event, { roomId: roomIdRef.current });
+    }
+  }, [emit]);
+
+  // Periodic re-sync while both are listening together (fixes small drifts)
+  useEffect(() => {
+    if (!shared || !roomId || !isPlaying) return;
+    const id = setInterval(pushSync, 10000);
+    return () => clearInterval(id);
+  }, [shared, roomId, isPlaying, pushSync]);
+
   // Socket listeners for shared control
   useEffect(() => {
     const unsub1 = on('music:play', () => playerRef.current?.playVideo?.());
@@ -82,8 +136,29 @@ export default function BackgroundMusic() {
     const unsub6 = on('music:mute', () => { playerRef.current?.mute?.(); setIsMuted(true); });
     const unsub7 = on('music:unmute', () => { playerRef.current?.unMute?.(); setIsMuted(false); });
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
-  }, [on]);
+    // Full-state sync from the partner: same track, same second, same play/pause
+    const unsub8 = on('music:sync', (data: { videoId?: string; time?: number; playing?: boolean }) => {
+      const p = playerRef.current;
+      if (!p || !playerReady || !data?.videoId) return;
+      try {
+        const cur = p.getVideoData?.()?.video_id || '';
+        if (cur !== data.videoId) {
+          p.loadVideoById(data.videoId);
+          if (data.time) p.seekTo(data.time, true);
+        } else {
+          const t = p.getCurrentTime?.() || 0;
+          if (data.time && Math.abs(t - data.time) > 2) p.seekTo(data.time, true);
+        }
+        const st = p.getPlayerState?.();
+        if (data.playing && st !== 1) p.playVideo();
+        else if (!data.playing && st === 1) p.pauseVideo();
+      } catch {
+        // ignore — player may still be loading
+      }
+    });
+
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); };
+  }, [on, playerReady]);
 
   useEffect(() => {
     const handler = () => setShowPlayer(true);
@@ -93,10 +168,10 @@ export default function BackgroundMusic() {
 
   const safe = (fn: () => void) => { if (playerReady && playerRef.current) fn(); };
 
-  const handlePlay = () => { safe(() => { playerRef.current.playVideo(); emit('music:play'); }); };
-  const handlePause = () => { safe(() => { playerRef.current.pauseVideo(); emit('music:pause'); }); };
-  const handleNext = () => { safe(() => { playerRef.current.nextVideo(); emit('music:next'); }); };
-  const handlePrev = () => { safe(() => { playerRef.current.previousVideo(); emit('music:prev'); }); };
+  const handlePlay = () => { safe(() => { playerRef.current.playVideo(); }); sendCtrl('music:play'); syncSoon(600); };
+  const handlePause = () => { safe(() => { playerRef.current.pauseVideo(); }); sendCtrl('music:pause'); syncSoon(250); };
+  const handleNext = () => { safe(() => { playerRef.current.nextVideo(); }); sendCtrl('music:next'); syncSoon(1300); };
+  const handlePrev = () => { safe(() => { playerRef.current.previousVideo(); }); sendCtrl('music:prev'); syncSoon(1300); };
 
   const handleVolumeChange = (newVol: number) => {
     setVolume(newVol);
@@ -106,7 +181,9 @@ export default function BackgroundMusic() {
         playerRef.current.setVolume(newVol);
         if (newVol > 0 && isMuted) { playerRef.current.unMute(); setIsMuted(false); }
         if (newVol === 0) { playerRef.current.mute(); setIsMuted(true); }
-        emit('music:volume', { volume: newVol });
+        if (sharedRef.current && roomIdRef.current) {
+          emit('music:volume', { roomId: roomIdRef.current, volume: newVol });
+        }
       });
     }, 100);
   };
@@ -115,13 +192,29 @@ export default function BackgroundMusic() {
     if (isMuted) {
       safe(() => { playerRef.current.unMute(); playerRef.current.setVolume(volume || 50); });
       setIsMuted(false);
-      emit('music:unmute');
+      sendCtrl('music:unmute');
     } else {
       safe(() => { playerRef.current.mute(); });
       setIsMuted(true);
-      emit('music:mute');
+      sendCtrl('music:mute');
     }
   };
+
+  const toggleShared = (value: boolean) => {
+    setShared(value);
+    localStorage.setItem(SHARED_KEY, value ? '1' : '0');
+    // When enabling, push our current track so the partner aligns right away
+    if (value && roomIdRef.current) {
+      setTimeout(() => {
+        pushSync();
+        syncSoon(1200);
+      }, 900);
+    }
+  };
+
+  const segCls = (active: boolean) =>
+    `flex-1 flex items-center justify-center gap-1 text-[10px] font-bold py-1.5 rounded-lg transition ` +
+    (active ? 'bg-white text-love-600 shadow-sm' : 'text-love-400 hover:text-love-600');
 
   return (
     <>
@@ -146,7 +239,13 @@ export default function BackgroundMusic() {
                 </button>
               </div>
 
-              <p className="text-[10px] text-love-400 text-center mb-2">Controle compartilhado</p>
+              <p className="text-[10px] text-love-400 text-center mb-2">
+                {!inRoom
+                  ? 'Musica pessoal'
+                  : shared
+                    ? 'Sincronizado — os dois ouvem juntos'
+                    : 'Modo solo — so voce controla'}
+              </p>
 
               {/* Transport controls */}
               <div className="flex items-center justify-center gap-3 mb-3">
@@ -179,7 +278,24 @@ export default function BackgroundMusic() {
                 <span className="text-[10px] text-love-400 w-7 text-right">{isMuted ? 0 : volume}%</span>
               </div>
 
-              <p className="text-[10px] text-love-300 text-center mt-2">Ambos controlam a mesma musica</p>
+              {/* Shared toggle */}
+              {inRoom && (
+                <div className="mt-2.5">
+                  <div className="flex items-center gap-1 bg-love-50 rounded-xl p-1">
+                    <button onClick={() => toggleShared(false)} className={segCls(!shared)}>
+                      <User size={12} /> So eu
+                    </button>
+                    <button onClick={() => toggleShared(true)} className={segCls(shared)}>
+                      <Users size={12} /> Juntos
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-love-300 text-center mt-1.5">
+                    {shared
+                      ? 'Toque em um celular — a musica toca nos dois'
+                      : 'Cada um escuta a sua'}
+                  </p>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

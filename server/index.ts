@@ -894,15 +894,31 @@ io.on('connection', (socket: Socket) => {
   });
 
   // ===== SHARED MUSIC CONTROL =====
+  // Each device runs its own YouTube player; controls are mirrored to the partner
+  // in the same room. roomId comes from the payload OR from the socket's room
+  // (fallback — the global player may not know its room at emit time).
+  const musicRoomId = (payload: any): string => payload?.roomId || (socket.data as any)?.roomId || '';
 
   const musicEvents = ['music:play', 'music:pause', 'music:next', 'music:prev', 'music:mute', 'music:unmute'];
   for (const event of musicEvents) {
-    socket.on(event, ({ roomId }: { roomId: string }) => {
-      socket.to(roomId).emit(event);
+    socket.on(event, (payload: any) => {
+      const roomId = musicRoomId(payload);
+      if (roomId) socket.to(roomId).emit(event);
     });
   }
-  socket.on('music:volume', ({ roomId, volume }: { roomId: string; volume: number }) => {
-    socket.to(roomId).emit('music:volume', { volume });
+  socket.on('music:volume', (payload: { roomId?: string; volume: number }) => {
+    const roomId = musicRoomId(payload);
+    if (roomId) socket.to(roomId).emit('music:volume', { volume: payload.volume });
+  });
+  // Full state sync: same track, same position, same playing state on both phones
+  socket.on('music:sync', (payload: { roomId?: string; videoId?: string; time?: number; playing?: boolean }) => {
+    const roomId = musicRoomId(payload);
+    if (!roomId) return;
+    socket.to(roomId).emit('music:sync', {
+      videoId: payload.videoId || '',
+      time: payload.time || 0,
+      playing: !!payload.playing,
+    });
   });
 
   // ===== SNAKE =====
