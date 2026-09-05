@@ -479,12 +479,14 @@ io.on('connection', (socket: Socket) => {
         });
         break;
 
-      case 'hangman':
+      case 'hangman': {
+        // The word-choosing role alternates every round (player 0, then 1, then 0...)
+        const hmChooserIdx = room.state.hangmanChooserIdx || 0;
         socket.emit('game:assigned', {
-          role: playerIndex === 0 ? 'chooser' : 'guesser',
+          role: playerIndex === hmChooserIdx ? 'chooser' : 'guesser',
           players: {
-            chooser: room.players[0]?.name || '',
-            guesser: room.players[1]?.name || '',
+            chooser: room.players[hmChooserIdx]?.name || '',
+            guesser: room.players[1 - hmChooserIdx]?.name || '',
           },
         });
         // Refresh / reconnect mid-round: replay the current state so the
@@ -498,6 +500,7 @@ io.on('connection', (socket: Socket) => {
           });
         }
         break;
+      }
 
       case 'memory':
         socket.emit('game:assigned', {
@@ -629,13 +632,24 @@ io.on('connection', (socket: Socket) => {
   });
 
   // ===== HANGMAN =====
+  // Roles alternate each round: round 1 player[0] chooses, round 2 player[1]
+  // chooses, and so on. The current chooser is tracked in hangmanChooserIdx.
+  function emitHangmanRoles(room: Room) {
+    const chooserIdx = room.state.hangmanChooserIdx || 0;
+    const chooser = room.players[chooserIdx]?.name || '';
+    const guesser = room.players[1 - chooserIdx]?.name || '';
+    for (const p of room.players) {
+      const role = p.id === room.players[chooserIdx]?.id ? 'chooser' : 'guesser';
+      io.to(p.id).emit('hangman:role', { role, players: { chooser, guesser } });
+    }
+  }
 
   socket.on('hangman:word', ({ roomId, word }: { roomId: string; word: string }) => {
     const room = rooms.get(roomId);
     if (!room) return;
-    // Only the chooser (player[0]) may submit a word, and only between rounds
+    // Only the current chooser may submit a word, and only between rounds
     const idx = room.players.findIndex((p: any) => p.id === socket.id);
-    if (idx !== 0 || hangmanPhase(room) !== 'setup') return;
+    if (idx !== (room.state.hangmanChooserIdx || 0) || hangmanPhase(room) !== 'setup') return;
     // Normalize: remove accents and non-letters so the A-Z keyboard can
     // always solve the word (accented words used to deadlock the game).
     const clean = normalizeLetters(word);
@@ -661,7 +675,9 @@ io.on('connection', (socket: Socket) => {
     const allGuessed = wordLetters.every((x: string) => (room.state.guessedLetters as string[]).includes(x));
     if (allGuessed) {
       io.to(roomId).emit('hangman:win');
-      const guesserName = room.players[1]?.name;
+      // Credit the guesser of THIS round (whoever is not the chooser)
+      const chooserIdx = room.state.hangmanChooserIdx || 0;
+      const guesserName = room.players[1 - chooserIdx]?.name;
       if (guesserName && room.scoreboard) {
         if (!room.scoreboard[guesserName]) room.scoreboard[guesserName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
         room.scoreboard[guesserName].hangman++;
@@ -669,16 +685,34 @@ io.on('connection', (socket: Socket) => {
         io.to(roomId).emit('scoreboard:update', { scoreboard: room.scoreboard });
       }
     }
-    else if (room.state.wrongGuesses >= 6) io.to(roomId).emit('hangman:lose', { word: room.state.word });
+    else if (room.state.wrongGuesses >= 6) {
+      io.to(roomId).emit('hangman:lose', { word: room.state.word });
+      // The chooser wins when the guesser runs out of attempts
+      const chooserIdx = room.state.hangmanChooserIdx || 0;
+      const chooserName = room.players[chooserIdx]?.name;
+      if (chooserName && room.scoreboard) {
+        if (!room.scoreboard[chooserName]) room.scoreboard[chooserName] = { tictactoe: 0, hangman: 0, memory: 0, words: 0, termo: 0, snake: 0, runner: 0, dodgeball: 0, kitchen: 0, total: 0 };
+        room.scoreboard[chooserName].hangman++;
+        room.scoreboard[chooserName].total++;
+        io.to(roomId).emit('scoreboard:update', { scoreboard: room.scoreboard });
+      }
+    }
   });
 
   socket.on('hangman:reset', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (!room) return;
+    // Only swap roles if a round actually just ended (double-click on
+    // "Jogar Novamente" must not flip the chooser twice).
+    const roundOver = hangmanPhase(room) === 'won' || hangmanPhase(room) === 'lost';
     room.state.word = '';
     room.state.guessedLetters = [];
     room.state.wrongGuesses = 0;
+    if (roundOver) {
+      room.state.hangmanChooserIdx = 1 - (room.state.hangmanChooserIdx || 0);
+    }
     io.to(roomId).emit('hangman:reset');
+    emitHangmanRoles(room);
   });
 
   // ===== MEMORY =====
@@ -797,6 +831,18 @@ io.on('connection', (socket: Socket) => {
       io.to(room.id).emit('wordsearch:miss', { word: normalized, currentTurn: room.state.wsTurn });
       wsNextTurn(room);
     }
+  });
+
+  socket.on('wordsearch:selecting', ({ roomId, cells }: { roomId: string; cells: number[] }) => {
+    const room = rooms.get(roomId);
+    if (!room || !room.state.wsGrid) return;
+    const idx = room.players.findIndex((p: any) => p.id === socket.id);
+    if (idx === -1) return;
+    // Relay the in-progress selection to the partner so they can watch live
+    socket.to(room.id).emit('wordsearch:selecting', {
+      cells: Array.isArray(cells) ? cells.slice(0, 12) : [],
+      playerIndex: idx,
+    });
   });
 
   socket.on('wordsearch:pass', ({ roomId }: { roomId: string }) => {
@@ -1200,11 +1246,26 @@ function initMemoryGame(room: Room) {
 }
 
 const WS_LEVELS = [
-  { size: 8,  count: 4, words: ['AMOR', 'BEIJO', 'DANCA', 'VELAS', 'FLORES', 'LUA'] },
-  { size: 10, count: 6, words: ['AMOR', 'BEIJO', 'DANCA', 'VELAS', 'FLORES', 'CARINHO', 'ABRACO', 'SORRISO', 'NAMORO', 'ROMANCE'] },
-  { size: 12, count: 8, words: ['AMOR', 'BEIJO', 'CARINHO', 'ABRACO', 'SORRISO', 'NAMORO', 'ROMANCE', 'CORACAO', 'PAIXAO', 'JUNTOS', 'CHOCOLATE', 'FELICIDADE'] },
+  { size: 8,  count: 4 },
+  { size: 10, count: 6 },
+  { size: 12, count: 8 },
 ];
 const WS_TOTAL_LEVELS = WS_LEVELS.length;
+
+// General Portuguese word pool (no accents — the grid uses A-Z). Words are
+// picked RANDOMLY per level, so every board is different.
+const WS_POOL = [
+  // Comida
+  'PIZZA', 'CHOCOLATE', 'SUSHI', 'SORVETE', 'BOLO', 'PIPOCA', 'PASTEL', 'ACAI', 'LASANHA', 'FEIJAO', 'QUEIJO', 'BANANA', 'MORANGO', 'LARANJA', 'LIMAO', 'ABACAXI', 'MELANCIA', 'UVA', 'MACA', 'PAO',
+  // Animais
+  'GATO', 'CACHORRO', 'COELHO', 'BORBOLETA', 'PASSARO', 'TARTARUGA', 'PANDA', 'CAVALO', 'PEIXE', 'LEAO', 'TIGRE', 'ONCA', 'SAPO', 'PATO', 'GALINHA', 'VACA', 'LOBO', 'RAPOSA', 'GOLFINHO', 'ELEFANTE',
+  // Natureza
+  'LUA', 'SOL', 'ESTRELA', 'MAR', 'PRAIA', 'MONTANHA', 'RIO', 'ARVORE', 'FLOR', 'CHUVA', 'VENTO', 'FOGO', 'TERRA', 'CEU', 'NUVEM',
+  // Objetos
+  'LIVRO', 'CANETA', 'LAPIS', 'CADERNO', 'MESA', 'CADEIRA', 'JANELA', 'PORTA', 'RELOGIO', 'CHAVE', 'CELULAR', 'COMPUTADOR', 'SOFA', 'CAMA', 'ESPELHO', 'BICICLETA', 'CARRO', 'ONIBUS', 'AVIAO', 'BARCO', 'TREM',
+  // Vida e lazer
+  'MUSICA', 'DANCA', 'FESTA', 'VIAGEM', 'SORRISO', 'ABRACO', 'BEIJO', 'AMIGO', 'FAMILIA', 'ESCOLA', 'TRABALHO', 'CASA', 'CIDADE', 'RUA', 'PARQUE', 'JOGO', 'BOLA', 'BRINQUEDO', 'TESOURO', 'SEGREDO', 'SONHO', 'ALEGRIA', 'SAUDE', 'PAZ', 'FORCA', 'MAGIA', 'NATAL', 'FERIAS', 'ANIVERSARIO', 'FELICIDADE', 'CORACAO', 'PARCEIRO', 'APARTAMENTO', 'TELEVISAO',
+];
 
 function initWordSearch(room: Room, level: number = 1) {
   if (room.players.length < 2) return;
@@ -1217,7 +1278,9 @@ function initWordSearch(room: Room, level: number = 1) {
   room.state.wsTotalLevels = WS_TOTAL_LEVELS;
   if (!room.state.wsScores) room.state.wsScores = { player1: 0, player2: 0 };
 
-  const selected = [...cfg.words].sort(() => Math.random() - 0.5).slice(0, cfg.count);
+  // Random words that fit the board; never the same board twice in a row
+  const pool = WS_POOL.filter(w => w.length <= size);
+  const selected = [...pool].sort(() => Math.random() - 0.5).slice(0, cfg.count);
   const grid: string[] = new Array(size * size).fill('');
   const words: { text: string; cells: number[]; found: boolean }[] = [];
 

@@ -52,6 +52,12 @@ export default function Hangman() {
       setWrongGuesses(0);
     });
 
+    // Roles alternate every round — the server tells us who chooses this round
+    const unsubRole = on('hangman:role', (data: { role: 'chooser' | 'guesser'; players: any }) => {
+      setMyRole(data.role);
+      setPlayers(data.players);
+    });
+
     const unsub3 = on('hangman:guess', (data: { letter: string; isCorrect: boolean }) => {
       setGuessedLetters(prev => new Set([...prev, data.letter]));
       if (data.isCorrect) {
@@ -104,7 +110,7 @@ export default function Hangman() {
     });
 
     return () => {
-      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); unsub10();
+      unsub1(); unsub2(); unsubRole(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); unsub10();
     };
   }, [roomId, playerName, emit, on, navigate]);
 
@@ -387,7 +393,7 @@ export default function Hangman() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="text-lg font-bold text-love-500 mt-2"
                   >
-                    Parabens! Voce acertou!
+                    {myRole === 'guesser' ? 'Parabens! Voce acertou! 🎉' : 'Seu amor acertou! 💕'}
                   </motion.p>
                 )}
                 {gameState === 'lost' && (
@@ -396,7 +402,7 @@ export default function Hangman() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="text-lg font-bold text-love-500 mt-2"
                   >
-                    Nao foi dessa vez...
+                    {myRole === 'guesser' ? 'Nao foi dessa vez...' : 'Seu amor nao acertou...'}
                   </motion.p>
                 )}
               </div>

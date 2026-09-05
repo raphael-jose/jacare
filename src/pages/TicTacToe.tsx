@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, RotateCcw, LogOut, Grid3x3, Trophy, Heart } from 'lucide-react';
+import { ArrowLeft, RotateCcw, LogOut, Grid3x3, Trophy } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useSounds } from '../hooks/useSounds';
 import { showError } from '../utils/alert';
@@ -11,6 +11,25 @@ import Scoreboard from '../components/Scoreboard';
 
 type Board = (string | null)[];
 type Player = 'X' | 'O';
+
+// Cute SVG marks — X as a rounded pink cross, O as a violet ring
+function XMark({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className}>
+      <line x1="22" y1="22" x2="78" y2="78" stroke="#f43f5e" strokeWidth="16" strokeLinecap="round" />
+      <line x1="78" y1="22" x2="22" y2="78" stroke="#f43f5e" strokeWidth="16" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function OMark({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className}>
+      <circle cx="50" cy="50" r="32" fill="none" stroke="#8b5cf6" strokeWidth="16" strokeLinecap="round" />
+      <circle cx="50" cy="50" r="9" fill="#8b5cf6" opacity="0.35" />
+    </svg>
+  );
+}
 
 const WINNING_COMBOS = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -120,10 +139,6 @@ export default function TicTacToe() {
   const backToRoom = () => { emit('room:backToRoom', { roomId }); navigate(`/room/${roomId}`, { state: { from: 'tictactoe' } }); };
   const leaveRoom = () => navigate('/');
 
-  const getCellMark = (value: string | null) => {
-    return value || '';
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-md">
@@ -151,13 +166,13 @@ export default function TicTacToe() {
         {/* Players */}
         <div className="flex justify-between items-center mb-6">
           <div className={`text-center p-3 rounded-2xl flex-1 mr-2 ${mySymbol === 'X' ? 'bg-love-100 border-2 border-love-400' : 'bg-white/50 border-2 border-transparent'}`}>
-            <span className="text-2xl font-black text-love-500">X</span>
+            <XMark className="w-9 h-9 mx-auto" />
             <p className="font-bold text-love-700 text-sm truncate">{players.X || 'Esperando...'}</p>
             <p className="text-love-500 text-xs">{scores.X} vitorias</p>
           </div>
           <div className="text-love-400 font-bold text-sm">VS</div>
           <div className={`text-center p-3 rounded-2xl flex-1 ml-2 ${mySymbol === 'O' ? 'bg-love-100 border-2 border-love-400' : 'bg-white/50 border-2 border-transparent'}`}>
-            <Heart size={22} className="text-rose-500 mx-auto" fill="currentColor" />
+            <OMark className="w-9 h-9 mx-auto" />
             <p className="font-bold text-love-700 text-sm truncate">{players.O || 'Esperando...'}</p>
             <p className="text-love-500 text-xs">{scores.O} vitorias</p>
           </div>
@@ -203,8 +218,8 @@ export default function TicTacToe() {
                              : 'bg-gray-50 border-2 border-gray-200 hover:border-love-300 hover:bg-love-50 cursor-pointer'}`}
               >
                 {cell && (
-                  <motion.span initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 15 }}>
-                    {getCellMark(cell)}
+                  <motion.span initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 15 }} className="flex items-center justify-center w-full h-full">
+                    {cell === 'X' ? <XMark className="w-3/5 h-3/5" /> : <OMark className="w-3/5 h-3/5" />}
                   </motion.span>
                 )}
               </motion.button>
@@ -212,8 +227,20 @@ export default function TicTacToe() {
           </div>
         </div>
 
-        <div className="text-center">
-          <p className="text-love-400 text-sm font-bold">Empates: {scores.draws}</p>
+        {/* Restart — always visible so it's obvious how to start a new round */}
+        <div className="text-center mb-2">
+          <p className="text-love-400 text-sm font-bold mb-3">Empates: {scores.draws}</p>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={resetGame}
+            disabled={!gameStarted}
+            className="w-full btn-love flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <RotateCcw size={18} />
+            Jogar Novamente
+          </motion.button>
+          <p className="text-love-300 text-xs mt-2">Reinicia o tabuleiro para uma nova partida</p>
         </div>
       </motion.div>
 

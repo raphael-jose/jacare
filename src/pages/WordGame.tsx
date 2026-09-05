@@ -35,6 +35,7 @@ export default function WordGame() {
   const [myIndex, setMyIndex] = useState(0);
   const [players, setPlayers] = useState<string[]>([]);
   const [selection, setSelection] = useState<number[]>([]);
+  const [oppCells, setOppCells] = useState<Set<number>>(new Set());
   const [foundCells, setFoundCells] = useState<Set<number>>(new Set());
   const [missedWord, setMissedWord] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(30);
@@ -79,6 +80,7 @@ export default function WordGame() {
       setScores(data.scores);
       setCurrentTurn(data.currentTurn);
       setSelection([]);
+      setOppCells(new Set());
       setFoundCells(new Set());
       setMissedWord(null);
       setLevelUp(null);
@@ -88,7 +90,14 @@ export default function WordGame() {
     const unsub3 = on('wordsearch:turn', (data: { currentTurn: number }) => {
       setCurrentTurn(data.currentTurn);
       setSelection([]);
+      setOppCells(new Set());
       setMissedWord(null);
+    });
+
+    // Live view of the letters the partner is selecting (their turn)
+    const unsubSel = on('wordsearch:selecting', (data: { cells: number[]; playerIndex: number }) => {
+      if (data.playerIndex === myIndex) return;
+      setOppCells(new Set(data.cells || []));
     });
 
     const unsub4 = on('wordsearch:found', (data: { word: string; cells: number[]; wordsFound: string[]; scores: { player1: number; player2: number }; currentTurn: number }) => {
@@ -98,6 +107,7 @@ export default function WordGame() {
       setScores(data.scores);
       setCurrentTurn(data.currentTurn);
       setSelection([]);
+      setOppCells(new Set());
       setMissedWord(null);
     });
 
@@ -106,12 +116,14 @@ export default function WordGame() {
       setMissedWord(data.word);
       setCurrentTurn(data.currentTurn);
       setSelection([]);
+      setOppCells(new Set());
     });
 
     const unsubLevel = on('wordsearch:levelDone', (data: { level: number; scores: { player1: number; player2: number } }) => {
       playLevel();
       setLevelUp(data.level);
       setScores(data.scores);
+      setOppCells(new Set());
     });
 
     const unsub6 = on('wordsearch:gameOver', (data: { scores: { player1: number; player2: number }; winner: string | null }) => {
@@ -129,7 +141,7 @@ export default function WordGame() {
     });
 
     return () => {
-      unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsubLevel(); unsub6(); unsub7(); unsub8();
+      unsub1(); unsub2(); unsub3(); unsubSel(); unsub4(); unsub5(); unsubLevel(); unsub6(); unsub7(); unsub8();
     };
   }, [roomId, playerName, emit, on, navigate]);
 
@@ -138,13 +150,19 @@ export default function WordGame() {
     if (foundCells.has(index)) return; // already found — not selectable
     playClick();
 
-    setSelection(prev => {
-      // Toggle if last selected
-      if (prev[prev.length - 1] === index) return prev.slice(0, -1);
-      if (prev.includes(index)) return prev;
-      if (prev.length >= 12) return prev;
-      return [...prev, index];
-    });
+    let next: number[];
+    if (selection[selection.length - 1] === index) {
+      next = selection.slice(0, -1); // toggle off the last selected
+    } else if (selection.includes(index)) {
+      next = selection;
+    } else if (selection.length >= 12) {
+      next = selection;
+    } else {
+      next = [...selection, index];
+    }
+    setSelection(next);
+    // Share the in-progress selection so the partner can watch live
+    emit('wordsearch:selecting', { roomId, cells: next });
   };
 
   const submitSelection = () => {
@@ -155,7 +173,9 @@ export default function WordGame() {
 
   const clearSelection = () => {
     setSelection([]);
+    setOppCells(new Set());
     setMissedWord(null);
+    emit('wordsearch:selecting', { roomId, cells: [] });
   };
 
   const resetGame = () => {
@@ -279,6 +299,7 @@ export default function WordGame() {
             >
               {grid.map((letter, i) => {
                 const isSelected = selection.includes(i);
+                const isOpp = oppCells.has(i) && !isSelected;
                 const isFound = foundCells.has(i);
                 return (
                   <button
@@ -290,7 +311,9 @@ export default function WordGame() {
                         ? 'bg-green-100 text-green-600 border border-green-300'
                         : isSelected
                           ? 'bg-love-500 text-white border border-love-600 scale-110'
-                          : 'bg-love-50 text-love-700 border border-love-100 hover:bg-love-100'
+                          : isOpp
+                            ? 'bg-purple-100 text-purple-600 border border-purple-300 animate-pulse'
+                            : 'bg-love-50 text-love-700 border border-love-100 hover:bg-love-100'
                     } ${!myTurn ? 'opacity-70' : ''}`}
                   >
                     {letter}
