@@ -40,7 +40,7 @@ export default function Home() {
 
   useEffect(() => {
     const unsub1 = on('room:created', (data: { roomId: string }) => {
-      savePlayerInfo(playerName, avatar, true);
+      savePlayerInfo(playerName, avatar);
       navigate(`/room/${data.roomId}`);
     });
 
@@ -55,13 +55,13 @@ export default function Home() {
   const createRoom = () => {
     if (!playerName.trim()) return;
     setIsJoining(true);
-    savePlayerInfo(playerName.trim(), avatar, true);
+    savePlayerInfo(playerName.trim(), avatar);
     emit('room:create', { playerName: playerName.trim(), avatar });
   };
 
   const joinRoom = () => {
     if (!playerName.trim() || !roomCode.trim()) return;
-    savePlayerInfo(playerName.trim(), avatar, false);
+    savePlayerInfo(playerName.trim(), avatar);
     navigate(`/room/${roomCode.trim().toUpperCase()}`);
   };
 

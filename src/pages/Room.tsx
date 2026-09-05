@@ -22,7 +22,7 @@ export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { emit, on, connected } = useSocket();
+  const { emit, on, connected, socket } = useSocket();
 
   // Which game did we just leave ("Trocar Jogo")? Ignore a stale gameType
   // that still points to that same game so we don't bounce back into it.
@@ -30,19 +30,28 @@ export default function Room() {
   const fromGameRef = useRef<string | undefined>(fromGame);
   fromGameRef.current = fromGame;
 
-  const { name: playerName, avatar, isCreator } = getPlayerInfo();
-  const [players, setPlayers] = useState<{ name: string; avatar: string }[]>(isCreator ? [{ name: playerName, avatar }] : []);
+  const { name: playerName, avatar } = getPlayerInfo();
+  // Optimistic: show yourself immediately; the server response replaces the list.
+  const [players, setPlayers] = useState<{ name: string; avatar: string }[]>([{ name: playerName, avatar }]);
+  // Who is the creator? NEVER from sessionStorage (shared between tabs) — the
+  // server tells us via creatorId, compared against our own socket id.
+  const [isCreator, setIsCreator] = useState(false);
   const [copied, setCopied] = useState(false);
   const [waiting, setWaiting] = useState(true);
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const gotResponse = useRef(false);
 
   useEffect(() => {
+    const applyCreator = (creatorId?: string) => {
+      if (creatorId) setIsCreator(creatorId === socket.current?.id);
+    };
+
     // 1) Register ALL listeners FIRST
-    const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null }) => {
+    const unsub0 = on('room:state', (data: { players: { name: string; avatar: string }[]; gameType: string | null; creatorId?: string }) => {
       console.log('[Room] room:state received', data.players?.length, 'players');
       gotResponse.current = true;
       setPlayers(data.players);
+      applyCreator(data.creatorId);
       if (data.players.length >= 2) setWaiting(false);
       // If the room points to a game we did NOT just leave (e.g. the host
       // already picked a new one while we were navigating back), follow it.
@@ -51,10 +60,11 @@ export default function Room() {
       }
     });
 
-    const unsub2 = on('room:playerJoined', (data: { players: { name: string; avatar: string }[]; playerName: string }) => {
+    const unsub2 = on('room:playerJoined', (data: { players: { name: string; avatar: string }[]; playerName: string; creatorId?: string }) => {
       console.log('[Room] room:playerJoined received', data.playerName);
       gotResponse.current = true;
       setPlayers(data.players);
+      applyCreator(data.creatorId);
       setWaiting(false);
     });
 
@@ -74,11 +84,23 @@ export default function Room() {
     });
 
     // Listen for room:joined — the response to room:join (answered by every server version)
-    const unsub6 = on('room:joined', (data: { roomId: string; players: { name: string; avatar: string }[] }) => {
+    const unsub6 = on('room:joined', (data: { roomId: string; players: { name: string; avatar: string }[]; creatorId?: string }) => {
       console.log('[Room] room:joined received with', data.players?.length, 'players');
       gotResponse.current = true;
       setPlayers(data.players);
+      applyCreator(data.creatorId);
       if (data.players.length >= 2) setWaiting(false);
+    });
+
+    // When the other player leaves (grace period expired), drop them from the
+    // list and go back to waiting — the room stays alive for re-entry.
+    const unsub7 = on('game:playerLeft', (data: { playerName: string }) => {
+      console.log('[Room] player left:', data.playerName);
+      setPlayers(prev => {
+        const next = prev.filter(p => p.name !== data.playerName);
+        if (next.length < 2) setWaiting(true);
+        return next;
+      });
     });
 
     // 2) Join the room ONCE. socket.io buffers events sent before the socket connects,
@@ -95,7 +117,7 @@ export default function Room() {
     console.log('[Room] Mounted, registering listeners and joining room', roomId, 'as', playerName);
 
     return () => {
-      unsub0(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6();
+      unsub0(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7();
     };
   }, [roomId, playerName, avatar, emit, on, navigate]);
 

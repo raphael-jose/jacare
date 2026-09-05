@@ -24,6 +24,7 @@ interface Room {
   id: string;
   gameType: string | null;
   players: { id: string; name: string; avatar: string }[];
+  creatorId: string; // socket id of the player who created the room (players[0])
   state: any;
   maxPlayers: number;
   messages: ChatMessage[];
@@ -178,6 +179,7 @@ io.on('connection', (socket: Socket) => {
       id: roomId,
       gameType: null,
       players: [],
+      creatorId: socket.id,
       state: {},
       maxPlayers: 2,
       messages: [],
@@ -190,7 +192,7 @@ io.on('connection', (socket: Socket) => {
 
     room.players.push({ id: socket.id, name: playerName, avatar: avatar || '🐱' });
     const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-    socket.emit('room:created', { roomId, players: playersData });
+    socket.emit('room:created', { roomId, players: playersData, creatorId: room.creatorId });
     console.log(`🏠 Sala ${roomId} criada por ${playerName}`);
   });
 
@@ -205,6 +207,9 @@ io.on('connection', (socket: Socket) => {
     socket.join(roomId);
     socket.data = { roomId, playerName };
 
+    const playersData = () => room.players.map(p => ({ name: p.name, avatar: p.avatar }));
+
+    // 1) Grace period — this player disconnected recently and is coming back
     const disconnectKey = `${roomId}:${playerName}`;
     const graceEntry = disconnectedPlayers.get(disconnectKey);
     if (graceEntry) {
@@ -214,45 +219,61 @@ io.on('connection', (socket: Socket) => {
       if (idx >= 0) {
         room.players[idx].id = socket.id;
         room.players[idx].avatar = avatar || room.players[idx].avatar;
+        if (idx === 0) room.creatorId = socket.id; // creator reconnected
       }
-      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-      socket.emit('room:joined', { roomId, players: playersData });
-      // FIX: notify ALL players in room (including host) about reconnection
-      io.to(roomId).emit('room:playerJoined', { players: playersData, playerName });
+      const players = playersData();
+      socket.emit('room:joined', { roomId, players, creatorId: room.creatorId });
+      io.to(roomId).emit('room:playerJoined', { players, creatorId: room.creatorId, playerName });
       console.log(`🔄 ${playerName} reconectou na sala ${roomId}`);
       return;
     }
 
+    // 2) This exact socket is already in the room (double join)
     const existingIdx = room.players.findIndex(p => p.id === socket.id);
     if (existingIdx >= 0) {
       room.players[existingIdx].name = playerName;
       room.players[existingIdx].avatar = avatar || room.players[existingIdx].avatar;
-      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-      socket.emit('room:joined', { roomId, players: playersData });
+      if (existingIdx === 0) room.creatorId = socket.id;
+      const players = playersData();
+      socket.emit('room:joined', { roomId, players, creatorId: room.creatorId });
       return;
     }
 
+    // 3) Same name — only allowed to take over the slot if the player holding it
+    //    is DISCONNECTED (page refresh / reconnect). If that player is live, this
+    //    would hijack their slot — the root cause of "host occupies both slots"
+    //    and "guest sees an empty room" (guest inherits host's name via shared
+    //    sessionStorage between tabs).
     const nameIdx = room.players.findIndex(p => p.name === playerName);
     if (nameIdx >= 0) {
+      const existingConnected = io.sockets.sockets.has(room.players[nameIdx].id);
+      if (existingConnected) {
+        socket.emit('room:error', { message: 'Ja existe um jogador com esse nome na sala! Escolha outro nome.' });
+        return;
+      }
       room.players[nameIdx].id = socket.id;
       room.players[nameIdx].avatar = avatar || room.players[nameIdx].avatar;
-      const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-      socket.emit('room:joined', { roomId, players: playersData });
+      if (nameIdx === 0) room.creatorId = socket.id;
+      const players = playersData();
+      socket.emit('room:joined', { roomId, players, creatorId: room.creatorId });
+      io.to(roomId).emit('room:playerJoined', { players, creatorId: room.creatorId, playerName });
+      console.log(`🔄 ${playerName} retomou o lugar na sala ${roomId}`);
       return;
     }
 
+    // 4) Room full
     if (room.players.length >= room.maxPlayers) {
       socket.emit('room:error', { message: 'Sala cheia!' });
       return;
     }
 
-    room.players.push({ id: socket.id, name: playerName, avatar: avatar || 'cat' });
-
-    const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-    socket.emit('room:joined', { roomId, players: playersData });
-    // FIX: io.to notifies ALL in room, including host
-    io.to(roomId).emit('room:playerJoined', { players: playersData, playerName });
-    console.log(`💕 ${playerName} entrou na sala ${roomId}`);
+    // 5) Brand new player
+    room.players.push({ id: socket.id, name: playerName, avatar: avatar || '🐱' });
+    const players = playersData();
+    socket.emit('room:joined', { roomId, players, creatorId: room.creatorId });
+    // io.to notifies EVERYONE in the room, including the host
+    io.to(roomId).emit('room:playerJoined', { players, creatorId: room.creatorId, playerName });
+    console.log(`💕 ${playerName} entrou na sala ${roomId} (${room.players.length}/${room.maxPlayers})`);
   });
 
   // Room state request (for page refresh / navigation)
@@ -285,21 +306,29 @@ io.on('connection', (socket: Socket) => {
     if (existingIdx >= 0) {
       room.players[existingIdx].name = pName || room.players[existingIdx].name;
       room.players[existingIdx].avatar = pAvatar;
+      if (existingIdx === 0) room.creatorId = socket.id;
       const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-      socket.emit('room:state', { players: playersData, gameType: room.gameType });
+      socket.emit('room:state', { players: playersData, gameType: room.gameType, creatorId: room.creatorId });
       console.log(`📋 ${pName} ja esta na sala (${room.players.length} jogadores)`);
       return;
     }
 
-    // 3) Not in room by socket.id — check by name (reconnection)
+    // 3) Not in room by socket.id — check by name (reconnection). Only allowed
+    //    to take over the slot if the current holder is DISCONNECTED.
     const nameIdx = room.players.findIndex(p => p.name === pName);
     if (nameIdx >= 0) {
+      const existingConnected = io.sockets.sockets.has(room.players[nameIdx].id);
+      if (existingConnected) {
+        socket.emit('room:error', { message: 'Ja existe um jogador com esse nome na sala! Escolha outro nome.' });
+        return;
+      }
       room.players[nameIdx].id = socket.id;
       room.players[nameIdx].avatar = pAvatar;
+      if (nameIdx === 0) room.creatorId = socket.id;
       const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-      socket.emit('room:state', { players: playersData, gameType: room.gameType });
-      // FIX: use io.to so the host also gets updated player list on reconnect
-      io.to(roomId).emit('room:playerJoined', { players: playersData, playerName: pName });
+      socket.emit('room:state', { players: playersData, gameType: room.gameType, creatorId: room.creatorId });
+      // io.to so the host also gets the updated player list on reconnect
+      io.to(roomId).emit('room:playerJoined', { players: playersData, creatorId: room.creatorId, playerName: pName });
       console.log(`🔄 ${pName} reconectou por nome`);
       return;
     }
@@ -308,16 +337,16 @@ io.on('connection', (socket: Socket) => {
     if (pName && room.players.length < room.maxPlayers) {
       room.players.push({ id: socket.id, name: pName, avatar: pAvatar });
       const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-      socket.emit('room:state', { players: playersData, gameType: room.gameType });
-      // FIX: use io.to instead of socket.to so the HOST receives room:playerJoined too
-      io.to(roomId).emit('room:playerJoined', { players: playersData, playerName: pName });
+      socket.emit('room:state', { players: playersData, gameType: room.gameType, creatorId: room.creatorId });
+      // io.to instead of socket.to so the HOST receives room:playerJoined too
+      io.to(roomId).emit('room:playerJoined', { players: playersData, creatorId: room.creatorId, playerName: pName });
       console.log(`✅ ${pName} ENTROU na sala ${roomId} (${room.players.length} jogadores)`);
       return;
     }
 
     // 5) Room full or no name — just return current state
     const playersData = room.players.map(p => ({ name: p.name, avatar: p.avatar }));
-    socket.emit('room:state', { players: playersData, gameType: room.gameType });
+    socket.emit('room:state', { players: playersData, gameType: room.gameType, creatorId: room.creatorId });
     console.log(`📋 ${pName} sala cheia ou sem nome (${room.players.length}/${room.maxPlayers})`);
   });
 
